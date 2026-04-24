@@ -1596,3 +1596,12 @@ button:focus-visible {
     min-height: 82px;
   }
 }
+button:disabled {
+  opacity: 0.62;
+  cursor: not-allowed;
+}
+
+.actions-cell button:disabled,
+.bulk-actions button:disabled {
+  pointer-events: none;
+}

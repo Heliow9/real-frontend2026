@@ -41,6 +41,10 @@ function createBulkItem() {
   return { ...emptyItem, _key: `${Date.now()}-${Math.random().toString(36).slice(2)}` };
 }
 
+function getActionKey(type, ids) {
+  return `${type}:${ids.join(',')}`;
+}
+
 function PaymentRequestsPage() {
   const [items, setItems] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -56,8 +60,14 @@ function PaymentRequestsPage() {
   const [supplierSuggestions, setSupplierSuggestions] = useState([]);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [actionLoading, setActionLoading] = useState('');
 
-  const activeBulkRow = useMemo(() => bulkRows[activeBulkIndex] || bulkRows[0] || createBulkItem(), [bulkRows, activeBulkIndex]);
+  const activeBulkRow = useMemo(
+    () => bulkRows[activeBulkIndex] || bulkRows[0] || createBulkItem(),
+    [bulkRows, activeBulkIndex]
+  );
+
+  const isAnyFileActionLoading = !!actionLoading;
 
   async function load() {
     setLoading(true);
@@ -71,14 +81,18 @@ function PaymentRequestsPage() {
     }
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+  }, []);
 
   function updateForm(field, value) {
     setForm((prev) => ({ ...prev, [field]: value }));
   }
 
   function updateBulk(index, field, value) {
-    setBulkRows((prev) => prev.map((row, rowIndex) => rowIndex === index ? { ...row, [field]: value } : row));
+    setBulkRows((prev) =>
+      prev.map((row, rowIndex) => (rowIndex === index ? { ...row, [field]: value } : row))
+    );
   }
 
   async function handleSupplierInput(value, index = null) {
@@ -86,6 +100,7 @@ function PaymentRequestsPage() {
     else updateBulk(index, 'payeeName', value);
 
     if (value.trim().length < 2) return setSupplierSuggestions([]);
+
     const response = await searchPaymentSuppliers(value);
     setSupplierSuggestions((response.items || []).map((item) => ({ ...item, targetIndex: index })));
   }
@@ -99,8 +114,15 @@ function PaymentRequestsPage() {
       account: supplier.account || '',
       operation: supplier.operation || ''
     };
-    if (supplier.targetIndex === null || supplier.targetIndex === undefined) setForm((prev) => ({ ...prev, ...patch }));
-    else setBulkRows((prev) => prev.map((row, index) => index === supplier.targetIndex ? { ...row, ...patch } : row));
+
+    if (supplier.targetIndex === null || supplier.targetIndex === undefined) {
+      setForm((prev) => ({ ...prev, ...patch }));
+    } else {
+      setBulkRows((prev) =>
+        prev.map((row, index) => (index === supplier.targetIndex ? { ...row, ...patch } : row))
+      );
+    }
+
     setSupplierSuggestions([]);
   }
 
@@ -116,16 +138,24 @@ function PaymentRequestsPage() {
     setBulkRows((rows) => {
       const next = rows.filter((_, index) => index !== indexToRemove);
       const safeNext = next.length ? next : [createBulkItem()];
-      setActiveBulkIndex((current) => Math.min(current === indexToRemove ? Math.max(0, indexToRemove - 1) : current, safeNext.length - 1));
+
+      setActiveBulkIndex((current) =>
+        Math.min(current === indexToRemove ? Math.max(0, indexToRemove - 1) : current, safeNext.length - 1)
+      );
+
       return safeNext;
     });
   }
 
   async function submit(e) {
     e.preventDefault();
+
+    if (saving) return;
+
     setSaving(true);
     setError('');
     setMessage('');
+
     try {
       if (mode === 'single') {
         await createPaymentRequest(form);
@@ -133,12 +163,17 @@ function PaymentRequestsPage() {
         setMessage('Solicitação emitida com sucesso.');
       } else {
         const validRows = bulkRows.filter((row) => row.payeeName && row.description && row.amount);
-        if (!validRows.length) throw new Error('Adicione pelo menos uma solicitação válida ao lote.');
+
+        if (!validRows.length) {
+          throw new Error('Adicione pelo menos uma solicitação válida ao lote.');
+        }
+
         await createPaymentRequestsBulk(validRows.map(({ _key, ...row }) => row));
         setBulkRows([createBulkItem()]);
         setActiveBulkIndex(0);
         setMessage(`${validRows.length} solicitações emitidas com sucesso.`);
       }
+
       await load();
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Não foi possível emitir a solicitação.');
@@ -148,66 +183,207 @@ function PaymentRequestsPage() {
   }
 
   async function downloadPdf(ids) {
+    const actionKey = getActionKey('pdf', ids);
+    if (actionLoading) return;
+
+    setActionLoading(actionKey);
+    setError('');
+    setMessage('Gerando PDF. Aguarde...');
+
     try {
       const blob = await downloadPaymentRequestsPdf(ids);
       const url = window.URL.createObjectURL(blob);
+
       const link = document.createElement('a');
       link.href = url;
       link.download = ids.length > 1 ? 'solicitacoes-pagamento.pdf' : `solicitacao-${ids[0]}.pdf`;
+
       document.body.appendChild(link);
       link.click();
       link.remove();
+
       window.URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Erro ao baixar PDF:', error);
-      alert('Não foi possível baixar o PDF.');
+      setMessage('PDF gerado com sucesso.');
+    } catch (err) {
+      console.error('Erro ao baixar PDF:', err);
+      setError(err.response?.data?.message || 'Não foi possível baixar o PDF.');
+      setMessage('');
+    } finally {
+      setActionLoading('');
     }
   }
 
   async function downloadXlsx(ids) {
-    const blob = await downloadPaymentRequestsXlsx(ids);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = ids.length > 1 ? 'solicitacoes-pagamento.zip' : `solicitacao-${ids[0]}.xlsx`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const actionKey = getActionKey('xlsx', ids);
+    if (actionLoading) return;
+
+    setActionLoading(actionKey);
+    setError('');
+    setMessage('Gerando arquivo Excel. Aguarde...');
+
+    try {
+      const blob = await downloadPaymentRequestsXlsx(ids);
+      const url = URL.createObjectURL(blob);
+
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = ids.length > 1 ? 'solicitacoes-pagamento.zip' : `solicitacao-${ids[0]}.xlsx`;
+
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      URL.revokeObjectURL(url);
+      setMessage('Arquivo Excel gerado com sucesso.');
+    } catch (err) {
+      console.error('Erro ao baixar Excel:', err);
+      setError(err.response?.data?.message || 'Não foi possível baixar o arquivo Excel.');
+      setMessage('');
+    } finally {
+      setActionLoading('');
+    }
   }
 
   async function printPdf(ids) {
+    const actionKey = getActionKey('print', ids);
+    if (actionLoading) return;
+
+    setActionLoading(actionKey);
+    setError('');
+    setMessage('Preparando impressão. Aguarde...');
+
     try {
       const blob = await downloadPaymentRequestsPdf(ids);
       const url = URL.createObjectURL(blob);
+
       const win = window.open(url, '_blank');
+
       if (!win) {
-        alert('Permita pop-ups para imprimir.');
+        setError('O navegador bloqueou a janela de impressão. Permita pop-ups para este site.');
+        setMessage('');
+        URL.revokeObjectURL(url);
         return;
       }
-      setTimeout(() => win.print(), 1000);
+
+      setTimeout(() => {
+        try {
+          win.focus();
+          win.print();
+        } catch (printError) {
+          console.error(printError);
+        }
+      }, 1200);
+
+      setMessage('PDF preparado para impressão.');
     } catch (err) {
-      console.error(err);
-      alert('Erro ao imprimir PDF.');
+      console.error('Erro ao imprimir PDF:', err);
+      setError(err.response?.data?.message || 'Não foi possível preparar a impressão.');
+      setMessage('');
+    } finally {
+      setActionLoading('');
     }
+  }
+
+  function actionLabel(type, ids, defaultLabel) {
+    const actionKey = getActionKey(type, ids);
+    if (actionLoading !== actionKey) return defaultLabel;
+
+    if (type === 'pdf') return 'Gerando PDF...';
+    if (type === 'xlsx') return 'Gerando Excel...';
+    if (type === 'print') return 'Preparando...';
+
+    return 'Aguarde...';
   }
 
   const renderFields = (data, onChange, index = null) => (
     <div className="payment-form-grid">
-      <label>Gestor responsável<input value={data.managerName} onChange={(e) => onChange('managerName', e.target.value)} placeholder="Nome do gestor" /></label>
-      <label>Setor<input value={data.department} onChange={(e) => onChange('department', e.target.value)} placeholder="Ex: TI" /></label>
-      <label className="suggestion-wrap">Solicito pagamento<input value={data.payeeName} onChange={(e) => handleSupplierInput(e.target.value, index)} placeholder="CPF/CNPJ ou nome do fornecedor" required />
-        {supplierSuggestions.some((s) => s.targetIndex === index) && <div className="suggestion-list">{supplierSuggestions.filter((s) => s.targetIndex === index).map((s) => <button type="button" key={s.id} onClick={() => applySupplier(s)}>{s.name}<small>{s.documentNumber}</small></button>)}</div>}
+      <label>
+        Gestor responsável
+        <input value={data.managerName} onChange={(e) => onChange('managerName', e.target.value)} placeholder="Nome do gestor" />
       </label>
-      <label>NF<input value={data.invoiceNumber} onChange={(e) => onChange('invoiceNumber', e.target.value)} /></label>
-      <label>Centro de custo<input value={data.costCenter} onChange={(e) => onChange('costCenter', e.target.value)} placeholder="Administrativo" /></label>
-      <label>Vencimento<input type="date" value={data.dueDate} onChange={(e) => onChange('dueDate', e.target.value)} /></label>
-      <label>Banco<input value={data.bank} onChange={(e) => onChange('bank', e.target.value)} /></label>
-      <label>Agência<input value={data.agency} onChange={(e) => onChange('agency', e.target.value)} /></label>
-      <label>Conta<input value={data.account} onChange={(e) => onChange('account', e.target.value)} /></label>
-      <label>OP<input value={data.operation} onChange={(e) => onChange('operation', e.target.value)} /></label>
-      <label>CPF/CNPJ<input value={data.documentNumber} onChange={(e) => onChange('documentNumber', e.target.value)} /></label>
-      <label>Valor<input value={data.amount} onChange={(e) => onChange('amount', e.target.value)} placeholder="3400,00" required /></label>
-      <label className="wide">Referente a<textarea value={data.description} onChange={(e) => onChange('description', e.target.value)} required /></label>
-      <label className="wide">Obs<textarea value={data.notes} onChange={(e) => onChange('notes', e.target.value)} /></label>
+
+      <label>
+        Setor
+        <input value={data.department} onChange={(e) => onChange('department', e.target.value)} placeholder="Ex: TI" />
+      </label>
+
+      <label className="suggestion-wrap">
+        Solicito pagamento
+        <input
+          value={data.payeeName}
+          onChange={(e) => handleSupplierInput(e.target.value, index)}
+          placeholder="CPF/CNPJ ou nome do fornecedor"
+          required
+        />
+
+        {supplierSuggestions.some((s) => s.targetIndex === index) && (
+          <div className="suggestion-list">
+            {supplierSuggestions
+              .filter((s) => s.targetIndex === index)
+              .map((s) => (
+                <button type="button" key={s.id} onClick={() => applySupplier(s)}>
+                  {s.name}
+                  <small>{s.documentNumber}</small>
+                </button>
+              ))}
+          </div>
+        )}
+      </label>
+
+      <label>
+        NF
+        <input value={data.invoiceNumber} onChange={(e) => onChange('invoiceNumber', e.target.value)} />
+      </label>
+
+      <label>
+        Centro de custo
+        <input value={data.costCenter} onChange={(e) => onChange('costCenter', e.target.value)} placeholder="Administrativo" />
+      </label>
+
+      <label>
+        Vencimento
+        <input type="date" value={data.dueDate} onChange={(e) => onChange('dueDate', e.target.value)} />
+      </label>
+
+      <label>
+        Banco
+        <input value={data.bank} onChange={(e) => onChange('bank', e.target.value)} />
+      </label>
+
+      <label>
+        Agência
+        <input value={data.agency} onChange={(e) => onChange('agency', e.target.value)} />
+      </label>
+
+      <label>
+        Conta
+        <input value={data.account} onChange={(e) => onChange('account', e.target.value)} />
+      </label>
+
+      <label>
+        OP
+        <input value={data.operation} onChange={(e) => onChange('operation', e.target.value)} />
+      </label>
+
+      <label>
+        CPF/CNPJ
+        <input value={data.documentNumber} onChange={(e) => onChange('documentNumber', e.target.value)} />
+      </label>
+
+      <label>
+        Valor
+        <input value={data.amount} onChange={(e) => onChange('amount', e.target.value)} placeholder="3400,00" required />
+      </label>
+
+      <label className="wide">
+        Referente a
+        <textarea value={data.description} onChange={(e) => onChange('description', e.target.value)} required />
+      </label>
+
+      <label className="wide">
+        Obs
+        <textarea value={data.notes} onChange={(e) => onChange('notes', e.target.value)} />
+      </label>
     </div>
   );
 
@@ -217,11 +393,24 @@ function PaymentRequestsPage() {
 
       <form className="card-section payment-create" onSubmit={submit}>
         <div className="section-title-row">
-          <div><h3>Nova solicitação de pagamento</h3><p>Crie uma solicitação individual ou em lote, uma por página no PDF.</p></div>
-          <div className="segmented"><button type="button" className={mode === 'single' ? 'active' : ''} onClick={() => setMode('single')}>Individual</button><button type="button" className={mode === 'bulk' ? 'active' : ''} onClick={() => setMode('bulk')}>Em lote</button></div>
+          <div>
+            <h3>Nova solicitação de pagamento</h3>
+            <p>Crie uma solicitação individual ou em lote, uma por página no PDF.</p>
+          </div>
+
+          <div className="segmented">
+            <button type="button" className={mode === 'single' ? 'active' : ''} onClick={() => setMode('single')} disabled={saving}>
+              Individual
+            </button>
+            <button type="button" className={mode === 'bulk' ? 'active' : ''} onClick={() => setMode('bulk')} disabled={saving}>
+              Em lote
+            </button>
+          </div>
         </div>
 
-        {mode === 'single' ? renderFields(form, updateForm, null) : (
+        {mode === 'single' ? (
+          renderFields(form, updateForm, null)
+        ) : (
           <div className="bulk-tabs-layout">
             <aside className="bulk-tabs-sidebar">
               {bulkRows.map((row, index) => (
@@ -230,19 +419,32 @@ function PaymentRequestsPage() {
                   key={row._key || index}
                   className={`bulk-tab-button ${activeBulkIndex === index ? 'active' : ''}`}
                   onClick={() => setActiveBulkIndex(index)}
+                  disabled={saving}
                 >
                   <strong>SP {index + 1}</strong>
                   <span>{row.payeeName || 'Fornecedor não informado'}</span>
                 </button>
               ))}
-              <button type="button" className="bulk-add-tab" onClick={addBulkRow}><FiPlus /> Nova SP</button>
+
+              <button type="button" className="bulk-add-tab" onClick={addBulkRow} disabled={saving}>
+                <FiPlus /> Nova SP
+              </button>
             </aside>
 
             <div className="bulk-tab-content">
               <div className="section-title-row">
-                <div><strong>Solicitação {activeBulkIndex + 1}</strong><p>Preencha os dados desta SP e navegue pelas abas laterais.</p></div>
-                {bulkRows.length > 1 && <button type="button" className="ghost danger" onClick={() => removeBulkRow(activeBulkIndex)}><FiTrash2 /> Remover esta SP</button>}
+                <div>
+                  <strong>Solicitação {activeBulkIndex + 1}</strong>
+                  <p>Preencha os dados desta SP e navegue pelas abas laterais.</p>
+                </div>
+
+                {bulkRows.length > 1 && (
+                  <button type="button" className="ghost danger" onClick={() => removeBulkRow(activeBulkIndex)} disabled={saving}>
+                    <FiTrash2 /> Remover esta SP
+                  </button>
+                )}
               </div>
+
               {renderFields(activeBulkRow, (field, value) => updateBulk(activeBulkIndex, field, value), activeBulkIndex)}
             </div>
           </div>
@@ -250,19 +452,130 @@ function PaymentRequestsPage() {
 
         {error && <div className="alert error">{error}</div>}
         {message && <div className="alert success">{message}</div>}
-        <button className="primary-button" disabled={saving}>{saving ? 'Emitindo...' : 'Emitir solicitação'}</button>
+
+        <button className="primary-button" disabled={saving}>
+          {saving ? 'Emitindo solicitação...' : 'Emitir solicitação'}
+        </button>
       </form>
 
       <div className="card-section">
-        <div className="section-title-row"><div><h3>Relatório e reimpressão</h3><p>Filtre as emissões diárias, baixe ou imprima individualmente ou em lote.</p></div></div>
-        <div className="filters-row">
-          <div className="search-box"><FiSearch /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por protocolo, fornecedor, CPF/CNPJ ou NF" /></div>
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
-          <button className="secondary-button" onClick={load}>Filtrar</button>
+        <div className="section-title-row">
+          <div>
+            <h3>Relatório e reimpressão</h3>
+            <p>Filtre as emissões diárias, baixe ou imprima individualmente ou em lote.</p>
+          </div>
         </div>
-        <div className="bulk-actions"><button disabled={!selectedIds.length} onClick={() => downloadPdf(selectedIds)}><FiDownload /> Baixar PDF</button><button disabled={!selectedIds.length} onClick={() => downloadXlsx(selectedIds)}><FiFileText /> Baixar Excel</button><button disabled={!selectedIds.length} onClick={() => printPdf(selectedIds)}><FiPrinter /> Imprimir PDF</button></div>
-        <div className="table-wrap"><table className="data-table"><thead><tr><th></th><th>Protocolo</th><th>Fornecedor</th><th>Valor</th><th>Vencimento</th><th>Emissão</th><th>Ações</th></tr></thead><tbody>{loading ? <tr><td colSpan="7">Carregando...</td></tr> : items.map((item) => <tr key={item.id}><td><input type="checkbox" checked={selectedIds.includes(item.id)} onChange={(e) => setSelectedIds((ids) => e.target.checked ? [...ids, item.id] : ids.filter((id) => id !== item.id))} /></td><td>{item.protocol}</td><td>{item.payeeName}<small>{item.documentNumber}</small></td><td>{money(item.amount)}</td><td>{dateBR(item.dueDate)}</td><td>{dateBR(item.createdAt)}</td><td className="actions-cell"><button onClick={() => downloadPdf([item.id])}><FiDownload /></button><button title="Baixar Excel" onClick={() => downloadXlsx([item.id])}><FiFileText /></button><button title="Imprimir PDF" onClick={() => printPdf([item.id])}><FiPrinter /></button></td></tr>)}</tbody></table></div>
+
+        <div className="filters-row">
+          <div className="search-box">
+            <FiSearch />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar por protocolo, fornecedor, CPF/CNPJ ou NF"
+              disabled={loading}
+            />
+          </div>
+
+          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} disabled={loading} />
+          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} disabled={loading} />
+
+          <button className="secondary-button" onClick={load} disabled={loading}>
+            {loading ? 'Filtrando...' : 'Filtrar'}
+          </button>
+        </div>
+
+        <div className="bulk-actions">
+          <button disabled={!selectedIds.length || isAnyFileActionLoading} onClick={() => downloadPdf(selectedIds)}>
+            <FiDownload /> {actionLabel('pdf', selectedIds, 'Baixar PDF')}
+          </button>
+
+          <button disabled={!selectedIds.length || isAnyFileActionLoading} onClick={() => downloadXlsx(selectedIds)}>
+            <FiFileText /> {actionLabel('xlsx', selectedIds, 'Baixar Excel')}
+          </button>
+
+          <button disabled={!selectedIds.length || isAnyFileActionLoading} onClick={() => printPdf(selectedIds)}>
+            <FiPrinter /> {actionLabel('print', selectedIds, 'Imprimir PDF')}
+          </button>
+        </div>
+
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th></th>
+                <th>Protocolo</th>
+                <th>Fornecedor</th>
+                <th>Valor</th>
+                <th>Vencimento</th>
+                <th>Emissão</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan="7">Carregando...</td>
+                </tr>
+              ) : (
+                items.map((item) => (
+                  <tr key={item.id}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(item.id)}
+                        disabled={isAnyFileActionLoading}
+                        onChange={(e) =>
+                          setSelectedIds((ids) =>
+                            e.target.checked ? [...ids, item.id] : ids.filter((id) => id !== item.id)
+                          )
+                        }
+                      />
+                    </td>
+
+                    <td>{item.protocol}</td>
+
+                    <td>
+                      {item.payeeName}
+                      <small>{item.documentNumber}</small>
+                    </td>
+
+                    <td>{money(item.amount)}</td>
+                    <td>{dateBR(item.dueDate)}</td>
+                    <td>{dateBR(item.createdAt)}</td>
+
+                    <td className="actions-cell">
+                      <button
+                        title="Baixar PDF"
+                        disabled={isAnyFileActionLoading}
+                        onClick={() => downloadPdf([item.id])}
+                      >
+                        {actionLoading === getActionKey('pdf', [item.id]) ? '...' : <FiDownload />}
+                      </button>
+
+                      <button
+                        title="Baixar Excel"
+                        disabled={isAnyFileActionLoading}
+                        onClick={() => downloadXlsx([item.id])}
+                      >
+                        {actionLoading === getActionKey('xlsx', [item.id]) ? '...' : <FiFileText />}
+                      </button>
+
+                      <button
+                        title="Imprimir PDF"
+                        disabled={isAnyFileActionLoading}
+                        onClick={() => printPdf([item.id])}
+                      >
+                        {actionLoading === getActionKey('print', [item.id]) ? '...' : <FiPrinter />}
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
