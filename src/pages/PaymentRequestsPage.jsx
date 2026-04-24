@@ -45,6 +45,27 @@ function getActionKey(type, ids) {
   return `${type}:${ids.join(',')}`;
 }
 
+async function getBlobErrorMessage(err, fallback) {
+  const data = err?.response?.data;
+
+  if (data instanceof Blob) {
+    try {
+      const text = await data.text();
+
+      try {
+        const json = JSON.parse(text);
+        return json.message || json.error || fallback;
+      } catch {
+        return text || fallback;
+      }
+    } catch {
+      return fallback;
+    }
+  }
+
+  return err?.response?.data?.message || err?.message || fallback;
+}
+
 function PaymentRequestsPage() {
   const [items, setItems] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -71,6 +92,8 @@ function PaymentRequestsPage() {
 
   async function load() {
     setLoading(true);
+    setError('');
+
     try {
       const response = await fetchPaymentRequests({ search, from, to });
       setItems(response.items || []);
@@ -101,8 +124,12 @@ function PaymentRequestsPage() {
 
     if (value.trim().length < 2) return setSupplierSuggestions([]);
 
-    const response = await searchPaymentSuppliers(value);
-    setSupplierSuggestions((response.items || []).map((item) => ({ ...item, targetIndex: index })));
+    try {
+      const response = await searchPaymentSuppliers(value);
+      setSupplierSuggestions((response.items || []).map((item) => ({ ...item, targetIndex: index })));
+    } catch (err) {
+      setSupplierSuggestions([]);
+    }
   }
 
   function applySupplier(supplier) {
@@ -192,7 +219,17 @@ function PaymentRequestsPage() {
 
     try {
       const blob = await downloadPaymentRequestsPdf(ids);
-      const url = window.URL.createObjectURL(blob);
+
+      if (!blob || blob.size === 0) {
+        throw new Error('O backend retornou um PDF vazio.');
+      }
+
+      if (blob.type && !blob.type.includes('pdf')) {
+        const text = await blob.text();
+        throw new Error(text || 'O backend não retornou um PDF válido.');
+      }
+
+      const url = window.URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
 
       const link = document.createElement('a');
       link.href = url;
@@ -206,7 +243,8 @@ function PaymentRequestsPage() {
       setMessage('PDF gerado com sucesso.');
     } catch (err) {
       console.error('Erro ao baixar PDF:', err);
-      setError(err.response?.data?.message || 'Não foi possível baixar o PDF.');
+      const message = await getBlobErrorMessage(err, 'Não foi possível baixar o PDF.');
+      setError(message);
       setMessage('');
     } finally {
       setActionLoading('');
@@ -223,11 +261,21 @@ function PaymentRequestsPage() {
 
     try {
       const blob = await downloadPaymentRequestsXlsx(ids);
-      const url = URL.createObjectURL(blob);
+
+      if (!blob || blob.size === 0) {
+        throw new Error('O backend retornou um arquivo vazio.');
+      }
+
+      const isZip = ids.length > 1;
+      const type = isZip
+        ? 'application/zip'
+        : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+      const url = URL.createObjectURL(new Blob([blob], { type }));
 
       const link = document.createElement('a');
       link.href = url;
-      link.download = ids.length > 1 ? 'solicitacoes-pagamento.zip' : `solicitacao-${ids[0]}.xlsx`;
+      link.download = isZip ? 'solicitacoes-pagamento.zip' : `solicitacao-${ids[0]}.xlsx`;
 
       document.body.appendChild(link);
       link.click();
@@ -237,7 +285,8 @@ function PaymentRequestsPage() {
       setMessage('Arquivo Excel gerado com sucesso.');
     } catch (err) {
       console.error('Erro ao baixar Excel:', err);
-      setError(err.response?.data?.message || 'Não foi possível baixar o arquivo Excel.');
+      const message = await getBlobErrorMessage(err, 'Não foi possível baixar o arquivo Excel.');
+      setError(message);
       setMessage('');
     } finally {
       setActionLoading('');
@@ -254,8 +303,17 @@ function PaymentRequestsPage() {
 
     try {
       const blob = await downloadPaymentRequestsPdf(ids);
-      const url = URL.createObjectURL(blob);
 
+      if (!blob || blob.size === 0) {
+        throw new Error('O backend retornou um PDF vazio.');
+      }
+
+      if (blob.type && !blob.type.includes('pdf')) {
+        const text = await blob.text();
+        throw new Error(text || 'O backend não retornou um PDF válido.');
+      }
+
+      const url = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
       const win = window.open(url, '_blank');
 
       if (!win) {
@@ -277,7 +335,8 @@ function PaymentRequestsPage() {
       setMessage('PDF preparado para impressão.');
     } catch (err) {
       console.error('Erro ao imprimir PDF:', err);
-      setError(err.response?.data?.message || 'Não foi possível preparar a impressão.');
+      const message = await getBlobErrorMessage(err, 'Não foi possível preparar a impressão.');
+      setError(message);
       setMessage('');
     } finally {
       setActionLoading('');
@@ -546,27 +605,15 @@ function PaymentRequestsPage() {
                     <td>{dateBR(item.createdAt)}</td>
 
                     <td className="actions-cell">
-                      <button
-                        title="Baixar PDF"
-                        disabled={isAnyFileActionLoading}
-                        onClick={() => downloadPdf([item.id])}
-                      >
+                      <button title="Baixar PDF" disabled={isAnyFileActionLoading} onClick={() => downloadPdf([item.id])}>
                         {actionLoading === getActionKey('pdf', [item.id]) ? '...' : <FiDownload />}
                       </button>
 
-                      <button
-                        title="Baixar Excel"
-                        disabled={isAnyFileActionLoading}
-                        onClick={() => downloadXlsx([item.id])}
-                      >
+                      <button title="Baixar Excel" disabled={isAnyFileActionLoading} onClick={() => downloadXlsx([item.id])}>
                         {actionLoading === getActionKey('xlsx', [item.id]) ? '...' : <FiFileText />}
                       </button>
 
-                      <button
-                        title="Imprimir PDF"
-                        disabled={isAnyFileActionLoading}
-                        onClick={() => printPdf([item.id])}
-                      >
+                      <button title="Imprimir PDF" disabled={isAnyFileActionLoading} onClick={() => printPdf([item.id])}>
                         {actionLoading === getActionKey('print', [item.id]) ? '...' : <FiPrinter />}
                       </button>
                     </td>
