@@ -8,7 +8,8 @@ import {
   FiSettings,
   FiBookOpen,
   FiUsers,
-  FiMessageSquare
+  FiMessageSquare,
+  FiCreditCard
 } from 'react-icons/fi';
 import { useAuth } from '../contexts/AuthContext';
 import { hasPermission } from '../utils/permissions';
@@ -20,6 +21,7 @@ const items = [
   { to: '/conteudo/noticias', label: 'Notícias', icon: FiFileText, permission: 'news.read' },
   { to: '/midia', label: 'Mídia', icon: FiImage, permission: 'media.read' },
   { to: '/ouvidoria/reclamacoes', label: 'Ouvidoria', icon: FiMessageSquare, permission: 'complaints.read' },
+  { to: '/solicitacoes', label: 'Solicitações', icon: FiCreditCard, permission: 'payment_requests.read' },
   { to: '/usuarios', label: 'Usuários', icon: FiUsers, permission: 'users.read' },
   { to: '/perfil', label: 'Perfil', icon: FiUser },
   { to: '/configuracoes', label: 'Configurações', icon: FiSettings, permission: 'settings.read' }

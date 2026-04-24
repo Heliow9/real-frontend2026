@@ -141,3 +141,32 @@ export async function updateSystemSettings(payload) {
   const response = await api.put('/api/admin/settings', payload);
   return response.data;
 }
+
+export async function fetchPaymentRequests(params = {}) {
+  const response = await api.get('/api/admin/payment-requests', { params });
+  return response.data;
+}
+
+export async function createPaymentRequest(payload) {
+  const response = await api.post('/api/admin/payment-requests', payload);
+  return response.data;
+}
+
+export async function createPaymentRequestsBulk(items) {
+  const response = await api.post('/api/admin/payment-requests/bulk', { items });
+  return response.data;
+}
+
+export async function searchPaymentSuppliers(q) {
+  const response = await api.get('/api/admin/payment-requests/suppliers', { params: { q } });
+  return response.data;
+}
+
+export async function downloadPaymentRequestsPdf(ids) {
+  const query = Array.isArray(ids) ? ids.join(',') : String(ids);
+  const response = await api.get('/api/admin/payment-requests/pdf', {
+    params: { ids: query },
+    responseType: 'blob'
+  });
+  return response.data;
+}
