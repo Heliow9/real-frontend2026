@@ -1,0 +1,90 @@
+.bulk-tabs-layout {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 18px;
+  align-items: start;
+}
+
+.bulk-tabs-sidebar {
+  position: sticky;
+  top: 18px;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 20px;
+  background: #f8fafc;
+}
+
+.bulk-tab-button,
+.bulk-add-tab {
+  border: 0;
+  border-radius: 14px;
+  padding: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bulk-tab-button {
+  display: grid;
+  gap: 4px;
+  background: #fff;
+  color: #10213a;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+}
+
+.bulk-tab-button span {
+  font-size: 0.78rem;
+  color: #64748b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bulk-tab-button.active {
+  background: #0f8b7f;
+  color: #fff;
+}
+
+.bulk-tab-button.active span {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.bulk-add-tab {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+  color: #0f766e;
+  background: #e6fffb;
+}
+
+.bulk-tab-content {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 20px;
+  background: #fff;
+}
+
+@media (max-width: 900px) {
+  .bulk-tabs-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .bulk-tabs-sidebar {
+    position: static;
+    display: flex;
+    overflow-x: auto;
+    gap: 10px;
+  }
+
+  .bulk-tab-button {
+    min-width: 170px;
+  }
+
+  .bulk-add-tab {
+    min-width: 130px;
+  }
+}

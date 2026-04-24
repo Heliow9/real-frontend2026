@@ -6,6 +6,20 @@ import { fetchAdminNews, fetchHomeContent, fetchMedia } from '../services/dashbo
 import { useAuth } from '../contexts/AuthContext';
 import { hasPermission } from '../utils/permissions';
 
+function unwrapResponse(response, fallback) {
+  if (!response) return fallback;
+  if (Array.isArray(response)) return response;
+  if (response.items) return response.items;
+  if (response.data?.items) return response.data.items;
+  if (response.data?.data) return response.data.data;
+  if (response.data) return response.data;
+  return response;
+}
+
+function countArray(value) {
+  return Array.isArray(value) ? value.length : 0;
+}
+
 function DashboardHomePage() {
   const { user } = useAuth();
   const [stats, setStats] = useState({ news: 0, media: 0, services: 0, configuredSections: 0 });
@@ -19,7 +33,8 @@ function DashboardHomePage() {
     canReadMedia: hasPermission(user, 'media.read'),
     canReadComplaints: hasPermission(user, 'complaints.read'),
     canReadUsers: hasPermission(user, 'users.read'),
-    canReadSettings: hasPermission(user, 'settings.read')
+    canReadSettings: hasPermission(user, 'settings.read'),
+    canReadPaymentRequests: hasPermission(user, 'paymentRequests.read') || hasPermission(user, 'payment-requests.read')
   }), [user]);
 
   useEffect(() => {
@@ -31,31 +46,40 @@ function DashboardHomePage() {
         setError('');
 
         const [newsResponse, homeResponse, mediaResponse] = await Promise.all([
-          permissions.canReadNews ? fetchAdminNews().catch(() => ({ data: { data: [] } })) : Promise.resolve({ data: { data: [] } }),
-          permissions.canReadHome ? fetchHomeContent().catch(() => ({ data: { data: {} } })) : Promise.resolve({ data: { data: {} } }),
-          permissions.canReadMedia ? fetchMedia().catch(() => ({ data: { data: [] } })) : Promise.resolve({ data: { data: [] } })
+          permissions.canReadNews ? fetchAdminNews().catch(() => []) : Promise.resolve([]),
+          permissions.canReadHome ? fetchHomeContent().catch(() => ({})) : Promise.resolve({}),
+          permissions.canReadMedia ? fetchMedia().catch(() => []) : Promise.resolve([])
         ]);
 
         if (!mounted) return;
 
-        const newsItems = newsResponse.data?.data || [];
-        const mediaItems = mediaResponse.data?.data || [];
-        const home = homeResponse.data?.data || {};
+        const newsItems = unwrapResponse(newsResponse, []);
+        const mediaItems = unwrapResponse(mediaResponse, []);
+        const home = unwrapResponse(homeResponse, {}) || {};
+
+        const services =
+          home.serviceCards ||
+          home.services ||
+          home.homeServices ||
+          home.cards ||
+          [];
 
         const configuredSections = [
           home.heroTitle,
+          home.heroSubtitle,
           home.aboutTitle,
           home.servicesTitle,
           home.careersTitle,
           home.portfolioTitle,
-          home.finalCtaTitle
+          home.finalCtaTitle,
+          home.contactTitle
         ].filter(Boolean).length;
 
-        setRecentNews(newsItems.slice(0, 5));
+        setRecentNews(Array.isArray(newsItems) ? newsItems.slice(0, 5) : []);
         setStats({
-          news: newsItems.length,
-          media: mediaItems.length,
-          services: home.serviceCards?.length || 0,
+          news: countArray(newsItems),
+          media: countArray(mediaItems),
+          services: countArray(services),
           configuredSections
         });
       } catch (err) {
@@ -77,9 +101,10 @@ function DashboardHomePage() {
     { label: 'Notícias', to: '/conteudo/noticias', permission: 'news.read' },
     { label: 'Mídia', to: '/midia', permission: 'media.read' },
     { label: 'Ouvidoria', to: '/ouvidoria/reclamacoes', permission: 'complaints.read' },
+    { label: 'Solicitações', to: '/solicitacoes', permission: 'paymentRequests.read', fallbackPermission: 'payment-requests.read' },
     { label: 'Usuários', to: '/usuarios', permission: 'users.read' },
     { label: 'Configurações', to: '/configuracoes', permission: 'settings.read' }
-  ].filter((item) => hasPermission(user, item.permission));
+  ].filter((item) => hasPermission(user, item.permission) || (item.fallbackPermission && hasPermission(user, item.fallbackPermission)));
 
   return (
     <div className="page-stack">
@@ -136,7 +161,7 @@ function DashboardHomePage() {
                   <p>{item.excerpt || 'Sem resumo cadastrado.'}</p>
                 </div>
                 <span className={`badge ${item.status === 'PUBLISHED' ? 'success' : 'muted'}`}>
-                  {item.status}
+                  {item.status === 'PUBLISHED' ? 'Publicado' : 'Rascunho'}
                 </span>
               </div>
             ))}

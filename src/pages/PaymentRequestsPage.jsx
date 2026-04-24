@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { FiDownload, FiFileText, FiPlus, FiPrinter, FiSearch, FiTrash2 } from 'react-icons/fi';
 import PageHeader from '../components/PageHeader';
 import {
@@ -37,6 +37,10 @@ function dateBR(value) {
   return new Date(value).toLocaleDateString('pt-BR');
 }
 
+function createBulkItem() {
+  return { ...emptyItem, _key: `${Date.now()}-${Math.random().toString(36).slice(2)}` };
+}
+
 function PaymentRequestsPage() {
   const [items, setItems] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -47,11 +51,13 @@ function PaymentRequestsPage() {
   const [to, setTo] = useState('');
   const [mode, setMode] = useState('single');
   const [form, setForm] = useState(emptyItem);
-  const [bulkRows, setBulkRows] = useState([{ ...emptyItem }]);
+  const [bulkRows, setBulkRows] = useState([createBulkItem()]);
+  const [activeBulkIndex, setActiveBulkIndex] = useState(0);
   const [supplierSuggestions, setSupplierSuggestions] = useState([]);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
+  const activeBulkRow = useMemo(() => bulkRows[activeBulkIndex] || bulkRows[0] || createBulkItem(), [bulkRows, activeBulkIndex]);
 
   async function load() {
     setLoading(true);
@@ -98,6 +104,23 @@ function PaymentRequestsPage() {
     setSupplierSuggestions([]);
   }
 
+  function addBulkRow() {
+    setBulkRows((rows) => {
+      const next = [...rows, createBulkItem()];
+      setActiveBulkIndex(next.length - 1);
+      return next;
+    });
+  }
+
+  function removeBulkRow(indexToRemove) {
+    setBulkRows((rows) => {
+      const next = rows.filter((_, index) => index !== indexToRemove);
+      const safeNext = next.length ? next : [createBulkItem()];
+      setActiveBulkIndex((current) => Math.min(current === indexToRemove ? Math.max(0, indexToRemove - 1) : current, safeNext.length - 1));
+      return safeNext;
+    });
+  }
+
   async function submit(e) {
     e.preventDefault();
     setSaving(true);
@@ -110,41 +133,36 @@ function PaymentRequestsPage() {
         setMessage('Solicitação emitida com sucesso.');
       } else {
         const validRows = bulkRows.filter((row) => row.payeeName && row.description && row.amount);
-        await createPaymentRequestsBulk(validRows);
-        setBulkRows([{ ...emptyItem }]);
+        if (!validRows.length) throw new Error('Adicione pelo menos uma solicitação válida ao lote.');
+        await createPaymentRequestsBulk(validRows.map(({ _key, ...row }) => row));
+        setBulkRows([createBulkItem()]);
+        setActiveBulkIndex(0);
         setMessage(`${validRows.length} solicitações emitidas com sucesso.`);
       }
       await load();
     } catch (err) {
-      setError(err.response?.data?.message || 'Não foi possível emitir a solicitação.');
+      setError(err.response?.data?.message || err.message || 'Não foi possível emitir a solicitação.');
     } finally {
       setSaving(false);
     }
   }
 
-async function downloadPdf(ids) {
-  try {
-    const blob = await downloadPaymentRequestsPdf(ids);
-
-    const url = window.URL.createObjectURL(blob);
-
-    const link = document.createElement('a');
-    link.href = url;
-    link.download =
-      ids.length > 1
-        ? 'solicitacoes-pagamento.pdf'
-        : `solicitacao-${ids[0]}.pdf`;
-
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-
-    window.URL.revokeObjectURL(url);
-  } catch (error) {
-    console.error('Erro ao baixar PDF:', error);
-    alert('Não foi possível baixar o PDF.');
+  async function downloadPdf(ids) {
+    try {
+      const blob = await downloadPaymentRequestsPdf(ids);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = ids.length > 1 ? 'solicitacoes-pagamento.pdf' : `solicitacao-${ids[0]}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Erro ao baixar PDF:', error);
+      alert('Não foi possível baixar o PDF.');
+    }
   }
-}
 
   async function downloadXlsx(ids) {
     const blob = await downloadPaymentRequestsXlsx(ids);
@@ -156,26 +174,21 @@ async function downloadPdf(ids) {
     URL.revokeObjectURL(url);
   }
 
-async function printPdf(ids) {
-  try {
-    const blob = await downloadPaymentRequestsPdf(ids);
-    const url = URL.createObjectURL(blob);
-
-    const win = window.open(url, '_blank');
-
-    if (!win) {
-      alert('Permita pop-ups para imprimir.');
-      return;
+  async function printPdf(ids) {
+    try {
+      const blob = await downloadPaymentRequestsPdf(ids);
+      const url = URL.createObjectURL(blob);
+      const win = window.open(url, '_blank');
+      if (!win) {
+        alert('Permita pop-ups para imprimir.');
+        return;
+      }
+      setTimeout(() => win.print(), 1000);
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao imprimir PDF.');
     }
-
-    setTimeout(() => {
-      win.print();
-    }, 1000);
-  } catch (err) {
-    console.error(err);
-    alert('Erro ao imprimir PDF.');
   }
-}
 
   const renderFields = (data, onChange, index = null) => (
     <div className="payment-form-grid">
@@ -207,12 +220,34 @@ async function printPdf(ids) {
           <div><h3>Nova solicitação de pagamento</h3><p>Crie uma solicitação individual ou em lote, uma por página no PDF.</p></div>
           <div className="segmented"><button type="button" className={mode === 'single' ? 'active' : ''} onClick={() => setMode('single')}>Individual</button><button type="button" className={mode === 'bulk' ? 'active' : ''} onClick={() => setMode('bulk')}>Em lote</button></div>
         </div>
+
         {mode === 'single' ? renderFields(form, updateForm, null) : (
-          <div className="bulk-stack">
-            {bulkRows.map((row, index) => <div key={index} className="bulk-card"><div className="section-title-row"><strong>Solicitação {index + 1}</strong>{bulkRows.length > 1 && <button type="button" className="ghost danger" onClick={() => setBulkRows((rows) => rows.filter((_, i) => i !== index))}><FiTrash2 /> Remover</button>}</div>{renderFields(row, (field, value) => updateBulk(index, field, value), index)}</div>)}
-            <button type="button" className="secondary-button" onClick={() => setBulkRows((rows) => [...rows, { ...emptyItem }])}><FiPlus /> Adicionar solicitação ao lote</button>
+          <div className="bulk-tabs-layout">
+            <aside className="bulk-tabs-sidebar">
+              {bulkRows.map((row, index) => (
+                <button
+                  type="button"
+                  key={row._key || index}
+                  className={`bulk-tab-button ${activeBulkIndex === index ? 'active' : ''}`}
+                  onClick={() => setActiveBulkIndex(index)}
+                >
+                  <strong>SP {index + 1}</strong>
+                  <span>{row.payeeName || 'Fornecedor não informado'}</span>
+                </button>
+              ))}
+              <button type="button" className="bulk-add-tab" onClick={addBulkRow}><FiPlus /> Nova SP</button>
+            </aside>
+
+            <div className="bulk-tab-content">
+              <div className="section-title-row">
+                <div><strong>Solicitação {activeBulkIndex + 1}</strong><p>Preencha os dados desta SP e navegue pelas abas laterais.</p></div>
+                {bulkRows.length > 1 && <button type="button" className="ghost danger" onClick={() => removeBulkRow(activeBulkIndex)}><FiTrash2 /> Remover esta SP</button>}
+              </div>
+              {renderFields(activeBulkRow, (field, value) => updateBulk(activeBulkIndex, field, value), activeBulkIndex)}
+            </div>
           </div>
         )}
+
         {error && <div className="alert error">{error}</div>}
         {message && <div className="alert success">{message}</div>}
         <button className="primary-button" disabled={saving}>{saving ? 'Emitindo...' : 'Emitir solicitação'}</button>
