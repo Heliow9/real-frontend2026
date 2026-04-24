@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || 'https://real-backend-2026.onrender.com',
+  baseURL: process.env.REACT_APP_API_URL || 'https://real-backend-2026-1.onrender.com',
   timeout: 45000,
 });
 
