@@ -1405,3 +1405,194 @@ button:focus-visible {
     border-radius: 18px;
   }
 }
+
+.dashboard-home-pro {
+  gap: 18px;
+}
+
+.home-hero-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: center;
+  padding: 26px;
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at top left, rgba(20, 184, 166, 0.18), transparent 34%),
+    linear-gradient(135deg, #ffffff 0%, #f8fbff 100%);
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.08);
+}
+
+.home-eyebrow,
+.home-card-title span {
+  display: block;
+  font-size: 0.72rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #0f766e;
+  font-weight: 800;
+  margin-bottom: 6px;
+}
+
+.home-hero-card h2,
+.home-card-title h3 {
+  margin: 0;
+  color: #07162f;
+}
+
+.home-hero-card p {
+  margin: 8px 0 0;
+  max-width: 720px;
+  color: #607089;
+  line-height: 1.7;
+}
+
+.home-hero-badge {
+  min-width: 260px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 22px;
+  background: rgba(15, 118, 110, 0.08);
+  border: 1px solid rgba(15, 118, 110, 0.14);
+}
+
+.home-hero-badge svg {
+  font-size: 26px;
+  color: #0f766e;
+}
+
+.home-hero-badge strong,
+.home-hero-badge span {
+  display: block;
+}
+
+.home-hero-badge span {
+  margin-top: 3px;
+  color: #607089;
+  font-size: 0.86rem;
+}
+
+.home-dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.8fr) minmax(420px, 1.2fr);
+  gap: 18px;
+}
+
+.home-card-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.home-card-title > svg {
+  color: #0f766e;
+  font-size: 22px;
+}
+
+.home-shortcuts-card,
+.home-status-card,
+.home-news-card {
+  border-radius: 26px;
+  box-shadow: 0 22px 60px rgba(15, 23, 42, 0.07);
+}
+
+.shortcuts-grid-pro {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.shortcut-card-pro {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 44px 1fr 18px;
+  align-items: center;
+  gap: 12px;
+  min-height: 92px;
+  padding: 14px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  color: #07162f;
+  text-decoration: none;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.shortcut-card-pro:hover {
+  transform: translateY(-3px);
+  border-color: rgba(15, 118, 110, 0.32);
+  box-shadow: 0 16px 34px rgba(15, 118, 110, 0.12);
+}
+
+.shortcut-icon-pro {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  background: rgba(15, 118, 110, 0.1);
+  color: #0f766e;
+  font-size: 21px;
+}
+
+.shortcut-content-pro {
+  min-width: 0;
+}
+
+.shortcut-content-pro strong {
+  display: block;
+  font-size: 0.95rem;
+  color: #07162f;
+}
+
+.shortcut-content-pro span {
+  display: block;
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.shortcut-arrow-pro {
+  color: #94a3b8;
+}
+
+.home-stats-clean .stat-card {
+  min-height: 110px;
+}
+
+@media (max-width: 1100px) {
+  .home-dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .home-hero-card {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .home-hero-badge {
+    width: 100%;
+  }
+}
+
+@media (max-width: 720px) {
+  .home-hero-card {
+    padding: 20px;
+    border-radius: 22px;
+  }
+
+  .shortcuts-grid-pro {
+    grid-template-columns: 1fr;
+  }
+
+  .shortcut-card-pro {
+    min-height: 82px;
+  }
+}
