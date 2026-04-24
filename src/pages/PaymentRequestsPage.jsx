@@ -122,15 +122,29 @@ function PaymentRequestsPage() {
     }
   }
 
-  async function downloadPdf(ids) {
+async function downloadPdf(ids) {
+  try {
     const blob = await downloadPaymentRequestsPdf(ids);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = ids.length > 1 ? 'solicitacoes-pagamento.pdf' : `solicitacao-${ids[0]}.pdf`;
-    a.click();
-    URL.revokeObjectURL(url);
+
+    const url = window.URL.createObjectURL(blob);
+
+    const link = document.createElement('a');
+    link.href = url;
+    link.download =
+      ids.length > 1
+        ? 'solicitacoes-pagamento.pdf'
+        : `solicitacao-${ids[0]}.pdf`;
+
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Erro ao baixar PDF:', error);
+    alert('Não foi possível baixar o PDF.');
   }
+}
 
   async function downloadXlsx(ids) {
     const blob = await downloadPaymentRequestsXlsx(ids);
@@ -142,18 +156,26 @@ function PaymentRequestsPage() {
     URL.revokeObjectURL(url);
   }
 
-  async function printPdf(ids) {
+async function printPdf(ids) {
+  try {
     const blob = await downloadPaymentRequestsPdf(ids);
     const url = URL.createObjectURL(blob);
+
     const win = window.open(url, '_blank');
+
     if (!win) {
-      setError('O navegador bloqueou a janela de impressão. Permita pop-ups para este site.');
+      alert('Permita pop-ups para imprimir.');
       return;
     }
+
     setTimeout(() => {
-      try { win.print(); } catch (error) { console.error(error); }
-    }, 1200);
+      win.print();
+    }, 1000);
+  } catch (err) {
+    console.error(err);
+    alert('Erro ao imprimir PDF.');
   }
+}
 
   const renderFields = (data, onChange, index = null) => (
     <div className="payment-form-grid">
