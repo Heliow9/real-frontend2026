@@ -170,3 +170,12 @@ export async function downloadPaymentRequestsPdf(ids) {
   });
   return response.data;
 }
+
+export async function downloadPaymentRequestsXlsx(ids) {
+  const query = Array.isArray(ids) ? ids.join(',') : String(ids);
+  const response = await api.get('/api/admin/payment-requests/xlsx', {
+    params: { ids: query },
+    responseType: 'blob'
+  });
+  return response.data;
+}

@@ -5,6 +5,7 @@ import {
   createPaymentRequest,
   createPaymentRequestsBulk,
   downloadPaymentRequestsPdf,
+  downloadPaymentRequestsXlsx,
   fetchPaymentRequests,
   searchPaymentSuppliers
 } from '../services/dashboardService';
@@ -223,14 +224,38 @@ function PaymentRequestsPage() {
     }
   }
 
-  async function downloadPdf(ids) {
-    const blob = await downloadPaymentRequestsPdf(ids);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = ids.length > 1 ? 'solicitacoes-pagamento.pdf' : `solicitacao-${ids[0]}.pdf`;
-    a.click();
-    URL.revokeObjectURL(url);
+  async function downloadBlob(ids, type = 'pdf') {
+    setError('');
+    try {
+      const blob = type === 'xlsx'
+        ? await downloadPaymentRequestsXlsx(ids)
+        : await downloadPaymentRequestsPdf(ids);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const ext = type === 'xlsx' ? 'xlsx' : 'pdf';
+      a.download = ids.length > 1 ? 'solicitacoes-pagamento.' + ext : 'solicitacao-' + ids[0] + '.' + ext;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err.response?.data?.message || (type === 'pdf' ? 'Não foi possível gerar o PDF. Baixe o Excel do modelo e exporte para PDF pelo Excel.' : 'Não foi possível baixar o Excel.'));
+    }
+  }
+
+  async function printPdf(ids) {
+    setError('');
+    try {
+      const blob = await downloadPaymentRequestsPdf(ids);
+      const url = URL.createObjectURL(blob);
+      const win = window.open(url, '_blank');
+      if (!win) {
+        setError('O navegador bloqueou a janela de impressão. Permita pop-ups para imprimir.');
+        return;
+      }
+      setTimeout(() => { try { win.print(); } catch (e) {} }, 900);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Não foi possível abrir o PDF para impressão.');
+    }
   }
 
   const renderFields = (data, onChange, index = null) => (
@@ -282,8 +307,8 @@ function PaymentRequestsPage() {
           <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
           <button className="secondary-button" onClick={load}>Filtrar</button>
         </div>
-        <div className="bulk-actions"><button disabled={!selectedIds.length} onClick={() => downloadPdf(selectedIds)}><FiDownload /> Baixar selecionadas</button><button disabled={!selectedIds.length} onClick={() => printHtml(selectedItems)}><FiPrinter /> Imprimir selecionadas</button></div>
-        <div className="table-wrap"><table className="data-table"><thead><tr><th></th><th>Protocolo</th><th>Fornecedor</th><th>Valor</th><th>Vencimento</th><th>Emissão</th><th>Ações</th></tr></thead><tbody>{loading ? <tr><td colSpan="7">Carregando...</td></tr> : items.map((item) => <tr key={item.id}><td><input type="checkbox" checked={selectedIds.includes(item.id)} onChange={(e) => setSelectedIds((ids) => e.target.checked ? [...ids, item.id] : ids.filter((id) => id !== item.id))} /></td><td>{item.protocol}</td><td>{item.payeeName}<small>{item.documentNumber}</small></td><td>{money(item.amount)}</td><td>{dateBR(item.dueDate)}</td><td>{dateBR(item.createdAt)}</td><td className="actions-cell"><button onClick={() => downloadPdf([item.id])}><FiDownload /></button><button onClick={() => printHtml([item])}><FiPrinter /></button></td></tr>)}</tbody></table></div>
+        <div className="bulk-actions"><button disabled={!selectedIds.length} onClick={() => downloadBlob(selectedIds, 'pdf')}><FiDownload /> Baixar PDF</button><button disabled={!selectedIds.length} onClick={() => downloadBlob(selectedIds, 'xlsx')}><FiFileText /> Baixar Excel modelo</button><button disabled={!selectedIds.length} onClick={() => printPdf(selectedIds)}><FiPrinter /> Imprimir PDF</button></div>
+        <div className="table-wrap"><table className="data-table"><thead><tr><th></th><th>Protocolo</th><th>Fornecedor</th><th>Valor</th><th>Vencimento</th><th>Emissão</th><th>Ações</th></tr></thead><tbody>{loading ? <tr><td colSpan="7">Carregando...</td></tr> : items.map((item) => <tr key={item.id}><td><input type="checkbox" checked={selectedIds.includes(item.id)} onChange={(e) => setSelectedIds((ids) => e.target.checked ? [...ids, item.id] : ids.filter((id) => id !== item.id))} /></td><td>{item.protocol}</td><td>{item.payeeName}<small>{item.documentNumber}</small></td><td>{money(item.amount)}</td><td>{dateBR(item.dueDate)}</td><td>{dateBR(item.createdAt)}</td><td className="actions-cell"><button title="Baixar PDF" onClick={() => downloadBlob([item.id], 'pdf')}><FiDownload /></button><button title="Baixar Excel modelo" onClick={() => downloadBlob([item.id], 'xlsx')}><FiFileText /></button><button title="Imprimir PDF" onClick={() => printPdf([item.id])}><FiPrinter /></button></td></tr>)}</tbody></table></div>
       </div>
     </div>
   );
