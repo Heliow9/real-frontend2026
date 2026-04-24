@@ -856,3 +856,18 @@ textarea {
     min-height: auto;
   }
 }
+
+.primary-button:disabled,
+.ghost-button:disabled,
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.alert.warning {
+  background: #fff7ed;
+  border: 1px solid rgba(245, 158, 11, 0.22);
+  color: #92400e;
+}
