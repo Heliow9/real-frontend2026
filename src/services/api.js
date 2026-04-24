@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:3333'
+  baseURL: process.env.REACT_APP_API_URL || 'https://real-backend-2026.onrender.com'
 });
 
 api.interceptors.request.use((config) => {
