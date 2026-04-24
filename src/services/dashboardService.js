@@ -179,3 +179,23 @@ export async function downloadPaymentRequestsXlsx(ids) {
   });
   return response.data;
 }
+
+export async function fetchPaymentRequestSchedules(params = {}) {
+  const response = await api.get('/api/admin/payment-requests/schedules', { params });
+  return response.data;
+}
+
+export async function createPaymentRequestSchedule(payload) {
+  const response = await api.post('/api/admin/payment-requests/schedules', payload);
+  return response.data;
+}
+
+export async function updatePaymentRequestSchedule(id, payload) {
+  const response = await api.put(`/api/admin/payment-requests/schedules/${id}`, payload);
+  return response.data;
+}
+
+export async function deletePaymentRequestSchedule(id) {
+  const response = await api.delete(`/api/admin/payment-requests/schedules/${id}`);
+  return response.data;
+}

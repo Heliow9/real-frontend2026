@@ -16,6 +16,7 @@ import SettingsPage from './pages/SettingsPage';
 import UsersPage from './pages/UsersPage';
 import ComplaintsPage from './pages/ComplaintsPage';
 import PaymentRequestsPage from './pages/PaymentRequestsPage';
+import PaymentSchedulesPage from './pages/PaymentSchedulesPage';
 import UnauthorizedPage from './pages/UnauthorizedPage';
 import NotFoundPage from './pages/NotFoundPage';
 
@@ -49,6 +50,7 @@ function App() {
         <Route path="usuarios" element={<RequirePermission permission="users.read"><UsersPage /></RequirePermission>} />
         <Route path="ouvidoria/reclamacoes" element={<RequirePermission permission="complaints.read"><ComplaintsPage /></RequirePermission>} />
         <Route path="solicitacoes" element={<RequirePermission permission="payment_requests.read"><PaymentRequestsPage /></RequirePermission>} />
+        <Route path="solicitacoes/programadas" element={<RequirePermission permission="payment_requests.read"><PaymentSchedulesPage /></RequirePermission>} />
         <Route path="configuracoes" element={<RequirePermission permission="settings.read"><SettingsPage /></RequirePermission>} />
       </Route>
 
