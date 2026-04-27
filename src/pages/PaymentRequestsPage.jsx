@@ -395,7 +395,7 @@ function PaymentRequestsPage() {
         <input
           value={data.payeeName}
           onChange={(e) => handleSupplierInput(e.target.value, index)}
-          placeholder="CPF/CNPJ ou nome do fornecedor"
+          placeholder="Nome / Razao Social"
           required
         />
 
