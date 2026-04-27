@@ -7,7 +7,9 @@ import {
   downloadPaymentRequestsPdf,
   downloadPaymentRequestsXlsx,
   fetchPaymentRequests,
-  searchPaymentSuppliers
+  searchPaymentSuppliers,
+  searchCostCenters,
+  fetchPaymentRequestJobs
 } from '../services/dashboardService';
 
 const emptyItem = {
@@ -79,6 +81,8 @@ function PaymentRequestsPage() {
   const [bulkRows, setBulkRows] = useState([createBulkItem()]);
   const [activeBulkIndex, setActiveBulkIndex] = useState(0);
   const [supplierSuggestions, setSupplierSuggestions] = useState([]);
+  const [costCenterSuggestions, setCostCenterSuggestions] = useState([]);
+  const [jobs, setJobs] = useState([]);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [actionLoading, setActionLoading] = useState('');
@@ -95,8 +99,12 @@ function PaymentRequestsPage() {
     setError('');
 
     try {
-      const response = await fetchPaymentRequests({ search, from, to });
-      setItems(response.items || []);
+      const [requestsResponse, jobsResponse] = await Promise.all([
+        fetchPaymentRequests({ search, from, to }),
+        fetchPaymentRequestJobs({ status: 'PENDENTE' }).catch(() => ({ items: [] }))
+      ]);
+      setItems(requestsResponse.items || []);
+      setJobs(jobsResponse.items || []);
     } catch (err) {
       setError(err.response?.data?.message || 'Não foi possível carregar as solicitações.');
     } finally {
@@ -153,6 +161,32 @@ function PaymentRequestsPage() {
     setSupplierSuggestions([]);
   }
 
+  async function handleCostCenterInput(value, index = null) {
+    if (index === null) updateForm('costCenter', value);
+    else updateBulk(index, 'costCenter', value);
+
+    if (value.trim().length < 2) return setCostCenterSuggestions([]);
+
+    try {
+      const response = await searchCostCenters(value);
+      setCostCenterSuggestions((response.items || []).map((item) => ({ ...item, targetIndex: index })));
+    } catch {
+      setCostCenterSuggestions([]);
+    }
+  }
+
+  function applyCostCenter(costCenter) {
+    const value = costCenter.displayName || `${costCenter.code} - ${costCenter.name}`;
+
+    if (costCenter.targetIndex === null || costCenter.targetIndex === undefined) {
+      updateForm('costCenter', value);
+    } else {
+      updateBulk(costCenter.targetIndex, 'costCenter', value);
+    }
+
+    setCostCenterSuggestions([]);
+  }
+
   function addBulkRow() {
     setBulkRows((rows) => {
       const next = [...rows, createBulkItem()];
@@ -187,7 +221,7 @@ function PaymentRequestsPage() {
       if (mode === 'single') {
         await createPaymentRequest(form);
         setForm(emptyItem);
-        setMessage('Solicitação emitida com sucesso.');
+        setMessage('Solicitação enviada para a fila. Ela será processada automaticamente em instantes.');
       } else {
         const validRows = bulkRows.filter((row) => row.payeeName && row.description && row.amount);
 
@@ -198,7 +232,7 @@ function PaymentRequestsPage() {
         await createPaymentRequestsBulk(validRows.map(({ _key, ...row }) => row));
         setBulkRows([createBulkItem()]);
         setActiveBulkIndex(0);
-        setMessage(`${validRows.length} solicitações emitidas com sucesso.`);
+        setMessage(`${validRows.length} solicitações enviadas para a fila. Elas serão processadas automaticamente em instantes.`);
       }
 
       await load();
@@ -356,16 +390,6 @@ function PaymentRequestsPage() {
 
   const renderFields = (data, onChange, index = null) => (
     <div className="payment-form-grid">
-      <label>
-        Gestor responsável
-        <input value={data.managerName} onChange={(e) => onChange('managerName', e.target.value)} placeholder="Nome do gestor" />
-      </label>
-
-      <label>
-        Setor
-        <input value={data.department} onChange={(e) => onChange('department', e.target.value)} placeholder="Ex: TI" />
-      </label>
-
       <label className="suggestion-wrap">
         Solicito pagamento
         <input
@@ -390,13 +414,40 @@ function PaymentRequestsPage() {
       </label>
 
       <label>
+        Gestor responsável
+        <input value={data.managerName} onChange={(e) => onChange('managerName', e.target.value)} placeholder="Nome do gestor" />
+      </label>
+
+      <label>
+        Setor
+        <input value={data.department} onChange={(e) => onChange('department', e.target.value)} placeholder="Ex: TI" />
+      </label>
+
+      <label>
         NF
         <input value={data.invoiceNumber} onChange={(e) => onChange('invoiceNumber', e.target.value)} />
       </label>
 
-      <label>
+      <label className="suggestion-wrap">
         Centro de custo
-        <input value={data.costCenter} onChange={(e) => onChange('costCenter', e.target.value)} placeholder="Administrativo" />
+        <input
+          value={data.costCenter}
+          onChange={(e) => handleCostCenterInput(e.target.value, index)}
+          placeholder="Ex: 624 - Uruará Novo"
+        />
+
+        {costCenterSuggestions.some((s) => s.targetIndex === index) && (
+          <div className="suggestion-list">
+            {costCenterSuggestions
+              .filter((s) => s.targetIndex === index)
+              .map((s) => (
+                <button type="button" key={s.id} onClick={() => applyCostCenter(s)}>
+                  {s.displayName}
+                  <small>Centro de custo cadastrado</small>
+                </button>
+              ))}
+          </div>
+        )}
       </label>
 
       <label>
@@ -511,6 +562,7 @@ function PaymentRequestsPage() {
 
         {error && <div className="alert error">{error}</div>}
         {message && <div className="alert success">{message}</div>}
+        {jobs.length > 0 && <div className="alert success">Há {jobs.length} item(ns) aguardando processamento na fila.</div>}
 
         <button className="primary-button" disabled={saving}>
           {saving ? 'Emitindo solicitação...' : 'Emitir solicitação'}

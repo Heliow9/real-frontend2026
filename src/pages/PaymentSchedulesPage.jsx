@@ -6,7 +6,9 @@ import {
   createPaymentRequestSchedule,
   deletePaymentRequestSchedule,
   fetchPaymentRequestSchedules,
-  updatePaymentRequestSchedule
+  updatePaymentRequestSchedule,
+  searchPaymentSuppliers,
+  searchCostCenters
 } from '../services/dashboardService';
 
 const ONBOARDING_KEY = 'payment-schedules-onboarding-seen';
@@ -39,11 +41,6 @@ const frequencyLabels = {
   MENSAL: 'Mensal',
   TRIMESTRAL: 'Trimestral'
 };
-
-const scheduleTabs = [
-  { key: 'ATIVAS', label: 'Ativas', statuses: ['ATIVA', 'PAUSADA'] },
-  { key: 'CANCELADAS', label: 'Canceladas', statuses: ['CANCELADA'] }
-];
 
 const onboardingItems = [
   {
@@ -79,12 +76,6 @@ function dateTimeBR(value) {
   return d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
 }
 
-function statusClass(status) {
-  if (status === 'ATIVA') return 'success';
-  if (status === 'CANCELADA') return 'danger';
-  return 'muted';
-}
-
 function PaymentSchedulesPage() {
   const { user } = useAuth();
   const [items, setItems] = useState([]);
@@ -94,26 +85,11 @@ function PaymentSchedulesPage() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const [activeTab, setActiveTab] = useState('ATIVAS');
+  const [supplierSuggestions, setSupplierSuggestions] = useState([]);
+  const [costCenterSuggestions, setCostCenterSuggestions] = useState([]);
 
   const defaultEmail = useMemo(() => user?.email || '', [user]);
   const shouldShowDayOfMonth = form.frequency === 'MENSAL' || form.frequency === 'TRIMESTRAL';
-
-  const tabCounts = useMemo(() => {
-    return items.reduce(
-      (acc, item) => {
-        if (item.status === 'CANCELADA') acc.CANCELADAS += 1;
-        else acc.ATIVAS += 1;
-        return acc;
-      },
-      { ATIVAS: 0, CANCELADAS: 0 }
-    );
-  }, [items]);
-
-  const filteredItems = useMemo(() => {
-    const selectedTab = scheduleTabs.find((tab) => tab.key === activeTab) || scheduleTabs[0];
-    return items.filter((item) => selectedTab.statuses.includes(item.status));
-  }, [items, activeTab]);
 
   async function load() {
     setLoading(true);
@@ -153,11 +129,6 @@ function PaymentSchedulesPage() {
         next.dayOfMonth = '';
       }
 
-      if (field === 'dayOfMonth') {
-        const numeric = Number(value);
-        if (value && (numeric < 1 || numeric > 30)) return prev;
-      }
-
       return next;
     });
   }
@@ -165,6 +136,51 @@ function PaymentSchedulesPage() {
   function closeOnboarding() {
     localStorage.setItem(ONBOARDING_KEY, 'true');
     setShowOnboarding(false);
+  }
+
+  async function handleSupplierInput(value) {
+    update('payeeName', value);
+
+    if (value.trim().length < 2) return setSupplierSuggestions([]);
+
+    try {
+      const response = await searchPaymentSuppliers(value);
+      setSupplierSuggestions(response.items || []);
+    } catch {
+      setSupplierSuggestions([]);
+    }
+  }
+
+  function applySupplier(supplier) {
+    setForm((prev) => ({
+      ...prev,
+      payeeName: supplier.name || '',
+      documentNumber: supplier.documentNumber || '',
+      bank: supplier.bank || '',
+      agency: supplier.agency || '',
+      account: supplier.account || '',
+      operation: supplier.operation || ''
+    }));
+
+    setSupplierSuggestions([]);
+  }
+
+  async function handleCostCenterInput(value) {
+    update('costCenter', value);
+
+    if (value.trim().length < 2) return setCostCenterSuggestions([]);
+
+    try {
+      const response = await searchCostCenters(value);
+      setCostCenterSuggestions(response.items || []);
+    } catch {
+      setCostCenterSuggestions([]);
+    }
+  }
+
+  function applyCostCenter(costCenter) {
+    update('costCenter', costCenter.displayName || `${costCenter.code} - ${costCenter.name}`);
+    setCostCenterSuggestions([]);
   }
 
   async function submit(e) {
@@ -183,7 +199,6 @@ function PaymentSchedulesPage() {
       await createPaymentRequestSchedule(payload);
       setForm({ ...emptyForm, managerEmail: defaultEmail, managerName: user?.name || '', frequency: 'MENSAL' });
       setMessage('Programação criada com sucesso.');
-      setActiveTab('ATIVAS');
       await load();
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Não foi possível salvar a programação.');
@@ -193,19 +208,14 @@ function PaymentSchedulesPage() {
   }
 
   async function toggleStatus(item) {
-    if (item.status === 'CANCELADA') return;
-
     const next = item.status === 'ATIVA' ? 'PAUSADA' : 'ATIVA';
     await updatePaymentRequestSchedule(item.id, { status: next });
     await load();
   }
 
   async function remove(item) {
-    if (item.status === 'CANCELADA') return;
     if (!window.confirm(`Cancelar a programação "${item.name}"?`)) return;
-
     await deletePaymentRequestSchedule(item.id);
-    setMessage('Programação cancelada com sucesso.');
     await load();
   }
 
@@ -244,26 +254,13 @@ function PaymentSchedulesPage() {
       <div className="card-section">
         <div className="section-title-row">
           <div>
-            <h3>Programações</h3>
+            <h3>Programações ativas</h3>
             <p>O sistema envia aviso 2 dias antes e gera a SP no dia da execução com PDF em anexo.</p>
           </div>
         </div>
 
         {error && <div className="alert error">{error}</div>}
         {message && <div className="alert success">{message}</div>}
-
-        <div className="segmented" style={{ marginBottom: 16 }}>
-          {scheduleTabs.map((tab) => (
-            <button
-              key={tab.key}
-              type="button"
-              className={activeTab === tab.key ? 'active' : ''}
-              onClick={() => setActiveTab(tab.key)}
-            >
-              {tab.label} ({tabCounts[tab.key] || 0})
-            </button>
-          ))}
-        </div>
 
         <div className="table-wrap">
           <table className="data-table">
@@ -281,37 +278,25 @@ function PaymentSchedulesPage() {
             <tbody>
               {loading ? (
                 <tr><td colSpan="7">Carregando...</td></tr>
-              ) : filteredItems.length ? (
-                filteredItems.map((item) => (
+              ) : items.length ? (
+                items.map((item) => (
                   <tr key={item.id}>
                     <td>{item.name}<small>{item.payeeName}</small></td>
                     <td>{frequencyLabels[item.frequency] || item.frequency}</td>
-                    <td>{item.status === 'CANCELADA' ? '-' : dateTimeBR(item.nextRunAt)}</td>
-                    <td>{item.status === 'CANCELADA' ? '-' : dateTimeBR(item.nextReminderAt)}</td>
+                    <td>{dateTimeBR(item.nextRunAt)}</td>
+                    <td>{dateTimeBR(item.nextReminderAt)}</td>
                     <td>{item.managerEmail}</td>
-                    <td><span className={`status-pill ${statusClass(item.status)}`}>{item.status}</span></td>
+                    <td><span className={`status-pill ${item.status === 'ATIVA' ? 'success' : 'muted'}`}>{item.status}</span></td>
                     <td className="actions-cell">
-                      {item.status !== 'CANCELADA' ? (
-                        <>
-                          <button title={item.status === 'ATIVA' ? 'Pausar' : 'Ativar'} onClick={() => toggleStatus(item)}>
-                            {item.status === 'ATIVA' ? <FiPause /> : <FiPlay />}
-                          </button>
-                          <button title="Cancelar" onClick={() => remove(item)}><FiTrash2 /></button>
-                        </>
-                      ) : (
-                        <span style={{ color: '#64748b', fontSize: 12 }}>Sem ações</span>
-                      )}
+                      <button title={item.status === 'ATIVA' ? 'Pausar' : 'Ativar'} onClick={() => toggleStatus(item)}>
+                        {item.status === 'ATIVA' ? <FiPause /> : <FiPlay />}
+                      </button>
+                      <button title="Cancelar" onClick={() => remove(item)}><FiTrash2 /></button>
                     </td>
                   </tr>
                 ))
               ) : (
-                <tr>
-                  <td colSpan="7">
-                    {activeTab === 'CANCELADAS'
-                      ? 'Nenhuma programação cancelada.'
-                      : 'Nenhuma programação ativa ou pausada cadastrada.'}
-                  </td>
-                </tr>
+                <tr><td colSpan="7">Nenhuma programação cadastrada.</td></tr>
               )}
             </tbody>
           </table>
@@ -335,14 +320,42 @@ function PaymentSchedulesPage() {
           <label>Frequência<select value={form.frequency} onChange={(e) => update('frequency', e.target.value)}><option value="DIARIA">Diária</option><option value="SEMANAL">Semanal</option><option value="QUINZENAL">Quinzenal</option><option value="MENSAL">Mensal</option><option value="TRIMESTRAL">Trimestral</option></select></label>
           <label>Primeira execução<input type="date" value={form.startDate} onChange={(e) => update('startDate', e.target.value)} /></label>
           {shouldShowDayOfMonth && (
-            <label>Dia do mês<input type="number" min="1" max="30" value={form.dayOfMonth} onChange={(e) => update('dayOfMonth', e.target.value)} placeholder="Ex: 10 ou de 1 a 30" /></label>
+            <label>Dia do mês<input type="number" min="1" max="31" value={form.dayOfMonth} onChange={(e) => update('dayOfMonth', e.target.value)} placeholder="Ex: 10" /></label>
           )}
           <label>E-mail para avisos<input type="email" value={form.managerEmail} onChange={(e) => update('managerEmail', e.target.value)} placeholder={defaultEmail} /></label>
           <label>Gestor<input value={form.managerName} onChange={(e) => update('managerName', e.target.value)} /></label>
           <label>Setor<input value={form.department} onChange={(e) => update('department', e.target.value)} /></label>
-          <label>Fornecedor<input value={form.payeeName} onChange={(e) => update('payeeName', e.target.value)} required /></label>
+          <label className="suggestion-wrap">
+            Fornecedor
+            <input value={form.payeeName} onChange={(e) => handleSupplierInput(e.target.value)} required placeholder="CPF/CNPJ ou nome do fornecedor" />
+
+            {supplierSuggestions.length > 0 && (
+              <div className="suggestion-list">
+                {supplierSuggestions.map((supplier) => (
+                  <button type="button" key={supplier.id} onClick={() => applySupplier(supplier)}>
+                    {supplier.name}
+                    <small>{supplier.documentNumber}</small>
+                  </button>
+                ))}
+              </div>
+            )}
+          </label>
           <label>NF<input value={form.invoiceNumber} onChange={(e) => update('invoiceNumber', e.target.value)} /></label>
-          <label>Centro de custo<input value={form.costCenter} onChange={(e) => update('costCenter', e.target.value)} /></label>
+          <label className="suggestion-wrap">
+            Centro de custo
+            <input value={form.costCenter} onChange={(e) => handleCostCenterInput(e.target.value)} placeholder="Ex: 624 - Uruará Novo" />
+
+            {costCenterSuggestions.length > 0 && (
+              <div className="suggestion-list">
+                {costCenterSuggestions.map((costCenter) => (
+                  <button type="button" key={costCenter.id} onClick={() => applyCostCenter(costCenter)}>
+                    {costCenter.displayName}
+                    <small>Centro de custo cadastrado</small>
+                  </button>
+                ))}
+              </div>
+            )}
+          </label>
           <label>Valor<input value={form.amount} onChange={(e) => update('amount', e.target.value)} required placeholder="3400,00" /></label>
           <label>CPF/CNPJ<input value={form.documentNumber} onChange={(e) => update('documentNumber', e.target.value)} /></label>
           <label>Banco<input value={form.bank} onChange={(e) => update('bank', e.target.value)} /></label>

@@ -10,7 +10,8 @@ import {
   FiUsers,
   FiMessageSquare,
   FiCreditCard,
-  FiClock
+  FiClock,
+  FiLayers
 } from 'react-icons/fi';
 import { useAuth } from '../contexts/AuthContext';
 import { hasPermission } from '../utils/permissions';
@@ -23,9 +24,11 @@ const items = [
   { to: '/midia', label: 'Mídia', icon: FiImage, permission: 'media.read' },
   { to: '/ouvidoria/reclamacoes', label: 'Ouvidoria', icon: FiMessageSquare, permission: 'complaints.read' },
   { to: '/solicitacoes', label: 'Solicitações', icon: FiCreditCard, permission: 'payment_requests.read' },
-  { to: '/solicitacoes/programadas', label: 'SPs programadas', icon: FiClock, permission: 'payment_requests.read' },
+  { to: '/solicitacoes/programadas', label: 'SPs programadas', icon: FiClock,
+  FiLayers, permission: 'payment_requests.read' },
   { to: '/usuarios', label: 'Usuários', icon: FiUsers, permission: 'users.read' },
   { to: '/perfil', label: 'Perfil', icon: FiUser },
+  { to: '/configuracoes/centros-de-custo', label: 'Centros de custo', icon: FiLayers, permission: 'cost_centers.read' },
   { to: '/configuracoes', label: 'Configurações', icon: FiSettings, permission: 'settings.read' }
 ];
 

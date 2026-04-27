@@ -199,3 +199,30 @@ export async function deletePaymentRequestSchedule(id) {
   const response = await api.delete(`/api/admin/payment-requests/schedules/${id}`);
   return response.data;
 }
+
+
+export async function searchCostCenters(q, includeInactive = false) {
+  const response = await api.get('/api/admin/cost-centers', { params: { q, includeInactive } });
+  return response.data;
+}
+
+export async function createCostCenter(payload) {
+  const response = await api.post('/api/admin/cost-centers', payload);
+  return response.data;
+}
+
+export async function updateCostCenter(id, payload) {
+  const response = await api.put(`/api/admin/cost-centers/${id}`, payload);
+  return response.data;
+}
+
+export async function deleteCostCenter(id) {
+  const response = await api.delete(`/api/admin/cost-centers/${id}`);
+  return response.data;
+}
+
+export async function fetchPaymentRequestJobs(params = {}) {
+  const response = await api.get('/api/admin/payment-requests/jobs', { params });
+  return response.data;
+}
+
