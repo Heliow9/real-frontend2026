@@ -107,6 +107,7 @@ function PaymentRequestsPage() {
   const [bulkRows, setBulkRows] = useState([createBulkItem()]);
   const [activeBulkIndex, setActiveBulkIndex] = useState(0);
   const [supplierSuggestions, setSupplierSuggestions] = useState([]);
+  const [costCenterSuggestionTarget, setCostCenterSuggestionTarget] = useState(null);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [actionLoading, setActionLoading] = useState('');
@@ -116,6 +117,15 @@ function PaymentRequestsPage() {
     () => bulkRows[activeBulkIndex] || bulkRows[0] || createBulkItem(),
     [bulkRows, activeBulkIndex]
   );
+
+  const availableCostCenters = useMemo(() => {
+    const registeredCenters = items
+      .map((item) => item.costCenter)
+      .filter(Boolean);
+
+    return Array.from(new Set([...registeredCenters, ...COST_CENTER_OPTIONS]))
+      .sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [items]);
 
   const isAnyFileActionLoading = !!actionLoading;
 
@@ -173,6 +183,30 @@ function PaymentRequestsPage() {
     } catch (err) {
       setSupplierSuggestions([]);
     }
+  }
+
+  function handleCostCenterInput(value, index = null) {
+    if (index === null) updateForm('costCenter', value);
+    else updateBulk(index, 'costCenter', value);
+
+    setCostCenterSuggestionTarget(value.trim().length ? index : null);
+  }
+
+  function getCostCenterSuggestions(value) {
+    const term = (value || '').trim().toLowerCase();
+
+    if (!term) return [];
+
+    return availableCostCenters
+      .filter((option) => option.toLowerCase().includes(term))
+      .slice(0, 8);
+  }
+
+  function applyCostCenter(option, index = null) {
+    if (index === null) updateForm('costCenter', option);
+    else updateBulk(index, 'costCenter', option);
+
+    setCostCenterSuggestionTarget(null);
   }
 
   function applySupplier(supplier) {
@@ -495,19 +529,26 @@ function PaymentRequestsPage() {
         <input value={data.invoiceNumber} onChange={(e) => onChange('invoiceNumber', e.target.value)} />
       </label>
 
-      <label>
+      <label className="suggestion-wrap">
         Centro de custo
         <input
-          list="payment-request-cost-centers"
           value={data.costCenter}
-          onChange={(e) => onChange('costCenter', e.target.value)}
-          placeholder="Digite ou selecione o centro de custo"
+          onFocus={() => {
+            if ((data.costCenter || '').trim()) setCostCenterSuggestionTarget(index);
+          }}
+          onChange={(e) => handleCostCenterInput(e.target.value, index)}
+          placeholder="Digite o centro de custo"
         />
-        <datalist id="payment-request-cost-centers">
-          {COST_CENTER_OPTIONS.map((option) => (
-            <option key={option} value={option} />
-          ))}
-        </datalist>
+
+        {costCenterSuggestionTarget === index && getCostCenterSuggestions(data.costCenter).length > 0 && (
+          <div className="suggestion-list">
+            {getCostCenterSuggestions(data.costCenter).map((option) => (
+              <button type="button" key={option} onClick={() => applyCostCenter(option, index)}>
+                {option}
+              </button>
+            ))}
+          </div>
+        )}
       </label>
 
       <label>
