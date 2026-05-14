@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { FiDownload, FiFileText, FiPlus, FiPrinter, FiSearch, FiTrash2 } from 'react-icons/fi';
+import { FiDownload, FiFileText, FiPaperclip, FiPlus, FiPrinter, FiSearch, FiTrash2 } from 'react-icons/fi';
 import PageHeader from '../components/PageHeader';
 import {
   createPaymentRequest,
@@ -25,7 +25,9 @@ const emptyItem = {
   operation: '',
   documentNumber: '',
   amount: '',
-  notes: ''
+  notes: '',
+  invoiceAttachment: null,
+  boletoAttachment: null
 };
 
 function money(value) {
@@ -118,9 +120,19 @@ function PaymentRequestsPage() {
     setForm((prev) => ({ ...prev, [field]: value }));
   }
 
+  function updateFormAttachment(field, file) {
+    setForm((prev) => ({ ...prev, [field]: file || null }));
+  }
+
   function updateBulk(index, field, value) {
     setBulkRows((prev) =>
       prev.map((row, rowIndex) => (rowIndex === index ? { ...row, [field]: value } : row))
+    );
+  }
+
+  function updateBulkAttachment(index, field, file) {
+    setBulkRows((prev) =>
+      prev.map((row, rowIndex) => (rowIndex === index ? { ...row, [field]: file || null } : row))
     );
   }
 
@@ -418,23 +430,14 @@ function PaymentRequestsPage() {
   }
 
   const renderFields = (data, onChange, index = null) => (
+
     <div className="payment-form-grid">
-      <label>
-        Gestor responsável
-        <input value={data.managerName} onChange={(e) => onChange('managerName', e.target.value)} placeholder="Nome do gestor" />
-      </label>
-
-      <label>
-        Setor
-        <input value={data.department} onChange={(e) => onChange('department', e.target.value)} placeholder="Ex: TI" />
-      </label>
-
       <label className="suggestion-wrap">
         Solicito pagamento
         <input
           value={data.payeeName}
           onChange={(e) => handleSupplierInput(e.target.value, index)}
-          placeholder="CPF/CNPJ ou nome do fornecedor"
+          placeholder="Nome do fornecedor"
           required
         />
 
@@ -451,6 +454,17 @@ function PaymentRequestsPage() {
           </div>
         )}
       </label>
+      <label>
+        Gestor responsável
+        <input value={data.managerName} onChange={(e) => onChange('managerName', e.target.value)} placeholder="Nome do gestor" />
+      </label>
+
+      <label>
+        Setor
+        <input value={data.department} onChange={(e) => onChange('department', e.target.value)} placeholder="Ex: TI" />
+      </label>
+
+
 
       <label>
         NF
@@ -505,6 +519,34 @@ function PaymentRequestsPage() {
       <label className="wide">
         Obs
         <textarea value={data.notes} onChange={(e) => onChange('notes', e.target.value)} />
+      </label>
+
+      <label>
+        Anexar NF
+        <input
+          type="file"
+          accept="application/pdf,image/jpeg,image/png,image/webp"
+          onChange={(e) => {
+            const file = e.target.files?.[0] || null;
+            if (index === null) updateFormAttachment('invoiceAttachment', file);
+            else updateBulkAttachment(index, 'invoiceAttachment', file);
+          }}
+        />
+        {data.invoiceAttachment ? <small><FiPaperclip /> {data.invoiceAttachment.name}</small> : null}
+      </label>
+
+      <label>
+        Anexar boleto
+        <input
+          type="file"
+          accept="application/pdf,image/jpeg,image/png,image/webp"
+          onChange={(e) => {
+            const file = e.target.files?.[0] || null;
+            if (index === null) updateFormAttachment('boletoAttachment', file);
+            else updateBulkAttachment(index, 'boletoAttachment', file);
+          }}
+        />
+        {data.boletoAttachment ? <small><FiPaperclip /> {data.boletoAttachment.name}</small> : null}
       </label>
     </div>
   );
@@ -631,6 +673,7 @@ function PaymentRequestsPage() {
                 <th>Valor</th>
                 <th>Vencimento</th>
                 <th>Emissão</th>
+                <th>Anexos</th>
                 <th>Ações</th>
               </tr>
             </thead>
@@ -638,7 +681,7 @@ function PaymentRequestsPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan="7">Carregando...</td>
+                  <td colSpan="8">Carregando...</td>
                 </tr>
               ) : (
                 items.map((item) => (
@@ -666,6 +709,15 @@ function PaymentRequestsPage() {
                     <td>{money(item.amount)}</td>
                     <td>{dateBR(item.dueDate)}</td>
                     <td>{dateBR(item.createdAt)}</td>
+
+                    <td>
+                      {item.invoiceAttachmentUrl || item.boletoAttachmentUrl ? (
+                        <small>
+                          {item.invoiceAttachmentUrl ? 'NF ' : ''}
+                          {item.boletoAttachmentUrl ? 'Boleto' : ''}
+                        </small>
+                      ) : '-'}
+                    </td>
 
                     <td className="actions-cell">
                       <button title="Baixar PDF" disabled={isAnyFileActionLoading} onClick={() => downloadPdf([item.id])}>
