@@ -11,6 +11,31 @@ import {
   searchPaymentSuppliers
 } from '../services/dashboardService';
 
+
+const COST_CENTER_OPTIONS = [
+  'Administrativo',
+  'Adm',
+  'Almoxarifado',
+  'Comercial',
+  'Compras',
+  'Contabilidade',
+  'Diretoria',
+  'Financeiro',
+  'Fiscal',
+  'Jurídico',
+  'Logística',
+  'Manutenção',
+  'Marketing',
+  'Obra',
+  'Operacional',
+  'Produção',
+  'Projetos',
+  'RH',
+  'Segurança do Trabalho',
+  'Suprimentos',
+  'TI'
+];
+
 const emptyItem = {
   managerName: '',
   department: '',
@@ -430,9 +455,8 @@ function PaymentRequestsPage() {
   }
 
   const renderFields = (data, onChange, index = null) => (
-
     <div className="payment-form-grid">
-      <label className="suggestion-wrap">
+            <label className="suggestion-wrap">
         Solicito pagamento
         <input
           value={data.payeeName}
@@ -473,7 +497,17 @@ function PaymentRequestsPage() {
 
       <label>
         Centro de custo
-        <input value={data.costCenter} onChange={(e) => onChange('costCenter', e.target.value)} placeholder="Administrativo" />
+        <input
+          list="payment-request-cost-centers"
+          value={data.costCenter}
+          onChange={(e) => onChange('costCenter', e.target.value)}
+          placeholder="Digite ou selecione o centro de custo"
+        />
+        <datalist id="payment-request-cost-centers">
+          {COST_CENTER_OPTIONS.map((option) => (
+            <option key={option} value={option} />
+          ))}
+        </datalist>
       </label>
 
       <label>
