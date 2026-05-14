@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { FiDownload, FiFileText, FiPlus, FiPrinter, FiSearch, FiTrash2 } from 'react-icons/fi';
 import PageHeader from '../components/PageHeader';
 import {
@@ -7,6 +7,7 @@ import {
   downloadPaymentRequestsPdf,
   downloadPaymentRequestsXlsx,
   fetchPaymentRequests,
+  fetchPaymentRequestQueueStatus,
   searchPaymentSuppliers
 } from '../services/dashboardService';
 
@@ -82,6 +83,7 @@ function PaymentRequestsPage() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [actionLoading, setActionLoading] = useState('');
+  const queuePollingRef = useRef(null);
 
   const activeBulkRow = useMemo(
     () => bulkRows[activeBulkIndex] || bulkRows[0] || createBulkItem(),
@@ -90,9 +92,9 @@ function PaymentRequestsPage() {
 
   const isAnyFileActionLoading = !!actionLoading;
 
-  async function load() {
-    setLoading(true);
-    setError('');
+  async function load({ silent = false } = {}) {
+    if (!silent) setLoading(true);
+    if (!silent) setError('');
 
     try {
       const response = await fetchPaymentRequests({ search, from, to });
@@ -100,12 +102,16 @@ function PaymentRequestsPage() {
     } catch (err) {
       setError(err.response?.data?.message || 'Não foi possível carregar as solicitações.');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
   useEffect(() => {
     load();
+
+    return () => {
+      if (queuePollingRef.current) clearInterval(queuePollingRef.current);
+    };
   }, []);
 
   function updateForm(field, value) {
@@ -174,6 +180,61 @@ function PaymentRequestsPage() {
     });
   }
 
+
+  function stopQueuePolling() {
+    if (queuePollingRef.current) {
+      clearInterval(queuePollingRef.current);
+      queuePollingRef.current = null;
+    }
+  }
+
+  function startQueuePolling(jobId = null) {
+    stopQueuePolling();
+
+    let attempts = 0;
+    const maxAttempts = 20;
+
+    queuePollingRef.current = setInterval(async () => {
+      attempts += 1;
+
+      try {
+        const status = await fetchPaymentRequestQueueStatus(jobId);
+        const job = status.job;
+        const queueTotal = status.queue?.total || 0;
+
+        await load({ silent: true });
+
+        if (job?.status === 'COMPLETED') {
+          stopQueuePolling();
+          setMessage('Solicitação processada e relatório atualizado.');
+          return;
+        }
+
+        if (job?.status === 'ERROR') {
+          stopQueuePolling();
+          setError(job.error || 'A fila retornou erro ao processar a solicitação.');
+          setMessage('');
+          return;
+        }
+
+        if (!jobId && queueTotal === 0) {
+          stopQueuePolling();
+          setMessage('Fila processada e relatório atualizado.');
+          return;
+        }
+
+        if (attempts >= maxAttempts) {
+          stopQueuePolling();
+          setMessage('A solicitação continua na fila. O relatório será atualizado ao filtrar/reabrir a tela.');
+        }
+      } catch (err) {
+        if (attempts >= maxAttempts) {
+          stopQueuePolling();
+        }
+      }
+    }, 3000);
+  }
+
   async function submit(e) {
     e.preventDefault();
 
@@ -185,9 +246,10 @@ function PaymentRequestsPage() {
 
     try {
       if (mode === 'single') {
-        await createPaymentRequest(form);
+        const response = await createPaymentRequest(form);
         setForm(emptyItem);
-        setMessage('Solicitação emitida com sucesso.');
+        setMessage(response.message || 'Solicitação enviada para a fila. Atualizando relatório automaticamente...');
+        startQueuePolling(response.job?.id);
       } else {
         const validRows = bulkRows.filter((row) => row.payeeName && row.description && row.amount);
 
@@ -195,13 +257,14 @@ function PaymentRequestsPage() {
           throw new Error('Adicione pelo menos uma solicitação válida ao lote.');
         }
 
-        await createPaymentRequestsBulk(validRows.map(({ _key, ...row }) => row));
+        const response = await createPaymentRequestsBulk(validRows.map(({ _key, ...row }) => row));
         setBulkRows([createBulkItem()]);
         setActiveBulkIndex(0);
-        setMessage(`${validRows.length} solicitações emitidas com sucesso.`);
+        setMessage(response.message || `${validRows.length} solicitações enviadas para a fila. Atualizando relatório automaticamente...`);
+        startQueuePolling(response.job?.id);
       }
 
-      await load();
+      await load({ silent: true });
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Não foi possível emitir a solicitação.');
     } finally {

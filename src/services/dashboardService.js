@@ -157,6 +157,13 @@ export async function createPaymentRequestsBulk(items) {
   return response.data;
 }
 
+
+export async function fetchPaymentRequestQueueStatus(jobId) {
+  const params = jobId ? { jobId } : {};
+  const response = await api.get('/api/admin/payment-requests/queue/status', { params });
+  return response.data;
+}
+
 export async function searchPaymentSuppliers(q) {
   const response = await api.get('/api/admin/payment-requests/suppliers', { params: { q } });
   return response.data;
