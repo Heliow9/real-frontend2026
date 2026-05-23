@@ -9,49 +9,35 @@ import {
   FiBookOpen,
   FiUsers,
   FiMessageSquare,
+  FiCreditCard,
+  FiClock,
   FiBriefcase
 } from 'react-icons/fi';
+import { useAuth } from '../contexts/AuthContext';
+import { hasPermission } from '../utils/permissions';
 
 const items = [
   { to: '/dashboard', label: 'Visão geral', icon: FiGrid },
-  { to: '/conteudo/home', label: 'Home', icon: FiHome },
-  { to: '/conteudo/nossa-historia', label: 'Nossa história', icon: FiBookOpen },
-  { to: '/conteudo/noticias', label: 'Notícias', icon: FiFileText },
-  { to: '/midia', label: 'Mídia', icon: FiImage },
-  { to: '/ouvidoria/reclamacoes', label: 'Ouvidoria', icon: FiMessageSquare },
-  {
-    to: '/rh/curriculos',
-    label: 'RH Currículos',
-    icon: FiBriefcase,
-    roles: ['admin-full', 'super_admin', 'rh'],
-    permissions: ['careers.read', 'careers.manage']
-  },
-  { to: '/usuarios', label: 'Usuários', icon: FiUsers },
+  { to: '/conteudo/home', label: 'Home', icon: FiHome, permission: 'home.read' },
+  { to: '/conteudo/nossa-historia', label: 'Nossa história', icon: FiBookOpen, permission: 'home.read' },
+  { to: '/conteudo/noticias', label: 'Notícias', icon: FiFileText, permission: 'news.read' },
+  { to: '/midia', label: 'Mídia', icon: FiImage, permission: 'media.read' },
+  { to: '/ouvidoria/reclamacoes', label: 'Ouvidoria', icon: FiMessageSquare, permission: 'complaints.read' },
+  { to: '/solicitacoes', label: 'Solicitações', icon: FiCreditCard, permission: 'payment_requests.read' },
+  { to: '/solicitacoes/programadas', label: 'SPs programadas', icon: FiClock, permission: 'payment_requests.read' },
+  { to: '/rh/curriculos', label: 'RH Currículos', icon: FiBriefcase, permission: 'careers.read' },
+  { to: '/usuarios', label: 'Usuários', icon: FiUsers, permission: 'users.read' },
   { to: '/perfil', label: 'Perfil', icon: FiUser },
-  { to: '/configuracoes', label: 'Configurações', icon: FiSettings }
+  { to: '/configuracoes', label: 'Configurações', icon: FiSettings, permission: 'settings.read' }
 ];
 
 function SidebarNav({ onNavigate }) {
-  const storedUser = (() => {
-    try {
-      return JSON.parse(localStorage.getItem('realenergy_user') || 'null');
-    } catch {
-      return null;
-    }
-  })();
-
-  const canSeeItem = (item) => {
-    if (!item.roles?.length && !item.permissions?.length) return true;
-
-    const roles = storedUser?.roles || [];
-    const permissions = storedUser?.permissions || [];
-
-    return item.roles?.some((role) => roles.includes(role)) || item.permissions?.some((permission) => permissions.includes(permission));
-  };
+  const { user } = useAuth();
+  const visibleItems = items.filter((item) => hasPermission(user, item.permission));
 
   return (
     <nav className="sidebar-nav">
-      {items.filter(canSeeItem).map((item) => {
+      {visibleItems.map((item) => {
         const Icon = item.icon;
 
         return (

@@ -40,6 +40,7 @@ function ComplaintsPage() {
   });
   const [feedback, setFeedback] = useState('');
   const [error, setError] = useState('');
+  const [statusUpdating, setStatusUpdating] = useState(false);
 
   const load = async () => {
     try {
@@ -77,18 +78,31 @@ function ComplaintsPage() {
 
   const handleStatusUpdate = async (event) => {
     event.preventDefault();
-    if (!selected) return;
+    if (!selected || statusUpdating) return;
+
+    if (statusForm.status === selected.status) {
+      setError('Selecione um status diferente do status atual para registrar um novo avanço.');
+      return;
+    }
+
     try {
+      setStatusUpdating(true);
       setError('');
+      setFeedback('');
       const response = await updateComplaintStatus(selected.id, statusForm);
       setSelected(response.data);
       setFeedback('Status registrado, histórico atualizado e notificações disparadas quando aplicável.');
       await load();
-      setStatusForm((current) => ({ ...current, title: '', description: '' }));
+      setStatusForm((current) => ({ ...current, status: response.data.status, title: '', description: '' }));
     } catch (err) {
       setError(err?.response?.data?.message || 'Não foi possível atualizar o status.');
+    } finally {
+      setStatusUpdating(false);
     }
   };
+
+  const isSameStatus = Boolean(selected && statusForm.status === selected.status);
+  const statusSubmitDisabled = statusUpdating || isSameStatus || !statusForm.title.trim();
 
   return (
     <div className="page-stack">
@@ -192,7 +206,8 @@ function ComplaintsPage() {
                       <label className="inline-option"><input type="checkbox" checked={statusForm.notifyReporter} onChange={(event) => setStatusForm({ ...statusForm, notifyReporter: event.target.checked })} /><span>Notificar manifestante por e-mail</span></label>
                       <label className="inline-option"><input type="checkbox" checked={statusForm.notifyInternal} onChange={(event) => setStatusForm({ ...statusForm, notifyInternal: event.target.checked })} /><span>Notificar e-mails internos</span></label>
                     </div>
-                    <button className="primary-button" type="submit">Registrar avanço</button>
+                    <button className="primary-button" type="submit" disabled={statusSubmitDisabled}>{statusUpdating ? 'Registrando avanço...' : 'Registrar avanço'}</button>
+                    {isSameStatus ? <div className="alert warning">Selecione um status diferente do atual para liberar o registro do avanço.</div> : null}
                   </form>
                 </article>
               </div>
