@@ -5,6 +5,10 @@ import { useAuth } from '../contexts/AuthContext';
 
 const loginSlides = [
   {
+    label: 'Centro do Recife',
+    image: 'https://aem-all.accor.com/content/dam/all/hubs/americas/latam/generic-images/all-magazine/o-que-fazer-em-recife-a-noite-2024-1.jpg'
+  },
+  {
     label: 'Energia e operação',
     image: 'https://images.unsplash.com/photo-1473341304170-971dccb5ac1e?auto=format&fit=crop&w=1800&q=80'
   },
@@ -16,9 +20,10 @@ const loginSlides = [
     label: 'Recife iluminado',
     image: 'https://www.cultura.pe.gov.br/wp-content/uploads/2016/06/Recife-Assombrado-divulgacao-02.jpg'
   },
+
   {
-    label: 'Centro do Recife',
-    image: 'https://aem-all.accor.com/content/dam/all/hubs/americas/latam/generic-images/all-magazine/o-que-fazer-em-recife-a-noite-2024-1.jpg'
+    label: 'BH iluminada',
+    image: 'https://www.pracadaliberdade.com/wp-content/uploads/2025/11/iluminacao-liberdade-2.png'
   }
 ];
 
