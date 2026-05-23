@@ -14,11 +14,11 @@ const loginSlides = [
   },
   {
     label: 'Recife iluminado',
-    image: 'https://source.unsplash.com/1920x1080/?recife,night,city'
+    image: 'https://www.cultura.pe.gov.br/wp-content/uploads/2016/06/Recife-Assombrado-divulgacao-02.jpg'
   },
   {
     label: 'Centro do Recife',
-    image: 'https://source.unsplash.com/1920x1080/?recife,bridge,night'
+    image: 'https://aem-all.accor.com/content/dam/all/hubs/americas/latam/generic-images/all-magazine/o-que-fazer-em-recife-a-noite-2024-1.jpg'
   }
 ];
 
