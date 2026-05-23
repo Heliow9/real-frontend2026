@@ -1,6 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import ProtectedRoute from './components/ProtectedRoute';
-import RequirePermission from './components/RequirePermission';
 import DashboardLayout from './layouts/DashboardLayout';
 import DashboardHomePage from './pages/DashboardHomePage';
 import HomeContentPage from './pages/HomeContentPage';
@@ -15,9 +14,7 @@ import ProfilePage from './pages/ProfilePage';
 import SettingsPage from './pages/SettingsPage';
 import UsersPage from './pages/UsersPage';
 import ComplaintsPage from './pages/ComplaintsPage';
-import PaymentRequestsPage from './pages/PaymentRequestsPage';
-import PaymentSchedulesPage from './pages/PaymentSchedulesPage';
-import UnauthorizedPage from './pages/UnauthorizedPage';
+import RHCandidatesPage from './pages/RHCandidatesPage';
 import NotFoundPage from './pages/NotFoundPage';
 
 function App() {
@@ -41,17 +38,15 @@ function App() {
         <Route path="dashboard" element={<DashboardHomePage />} />
         <Route path="trocar-senha" element={<ChangePasswordPage />} />
         <Route path="alterar-senha" element={<Navigate to="/trocar-senha" replace />} />
-        <Route path="sem-acesso" element={<UnauthorizedPage />} />
-        <Route path="conteudo/home" element={<RequirePermission permission="home.read"><HomeContentPage /></RequirePermission>} />
-        <Route path="conteudo/nossa-historia" element={<RequirePermission permission="home.read"><AboutContentPage /></RequirePermission>} />
-        <Route path="conteudo/noticias" element={<RequirePermission permission="news.read"><NewsPage /></RequirePermission>} />
-        <Route path="midia" element={<RequirePermission permission="media.read"><MediaPage /></RequirePermission>} />
+        <Route path="conteudo/home" element={<HomeContentPage />} />
+        <Route path="conteudo/nossa-historia" element={<AboutContentPage />} />
+        <Route path="conteudo/noticias" element={<NewsPage />} />
+        <Route path="midia" element={<MediaPage />} />
         <Route path="perfil" element={<ProfilePage />} />
-        <Route path="usuarios" element={<RequirePermission permission="users.read"><UsersPage /></RequirePermission>} />
-        <Route path="ouvidoria/reclamacoes" element={<RequirePermission permission="complaints.read"><ComplaintsPage /></RequirePermission>} />
-        <Route path="solicitacoes" element={<RequirePermission permission="payment_requests.read"><PaymentRequestsPage /></RequirePermission>} />
-        <Route path="solicitacoes/programadas" element={<RequirePermission permission="payment_requests.read"><PaymentSchedulesPage /></RequirePermission>} />
-        <Route path="configuracoes" element={<RequirePermission permission="settings.read"><SettingsPage /></RequirePermission>} />
+        <Route path="usuarios" element={<UsersPage />} />
+        <Route path="ouvidoria/reclamacoes" element={<ComplaintsPage />} />
+        <Route path="rh/curriculos" element={<RHCandidatesPage />} />
+        <Route path="configuracoes" element={<SettingsPage />} />
       </Route>
 
       <Route path="*" element={<NotFoundPage />} />

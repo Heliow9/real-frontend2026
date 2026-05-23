@@ -142,96 +142,13 @@ export async function updateSystemSettings(payload) {
   return response.data;
 }
 
-
-function hasPaymentAttachments(payload) {
-  return Boolean(payload?.invoiceAttachment || payload?.boletoAttachment);
-}
-
-function toPaymentRequestFormData(payload) {
-  const formData = new FormData();
-  const { invoiceAttachment, boletoAttachment, ...cleanPayload } = payload;
-  formData.append('payload', JSON.stringify(cleanPayload));
-  if (invoiceAttachment) formData.append('invoiceAttachment', invoiceAttachment);
-  if (boletoAttachment) formData.append('boletoAttachment', boletoAttachment);
-  return formData;
-}
-
-function toBulkPaymentRequestFormData(items) {
-  const formData = new FormData();
-  const cleanItems = items.map(({ invoiceAttachment, boletoAttachment, ...item }, index) => {
-    if (invoiceAttachment) formData.append(`invoiceAttachment_${index}`, invoiceAttachment);
-    if (boletoAttachment) formData.append(`boletoAttachment_${index}`, boletoAttachment);
-    return item;
-  });
-  formData.append('payload', JSON.stringify({ items: cleanItems }));
-  return formData;
-}
-
-export async function fetchPaymentRequests(params = {}) {
-  const response = await api.get('/api/admin/payment-requests', { params });
+export async function fetchCandidates(params = {}) {
+  const response = await api.get('/api/admin/candidates', { params });
   return response.data;
 }
 
-export async function createPaymentRequest(payload) {
-  const body = hasPaymentAttachments(payload) ? toPaymentRequestFormData(payload) : payload;
-  const config = hasPaymentAttachments(payload) ? { headers: { 'Content-Type': 'multipart/form-data' } } : undefined;
-  const response = await api.post('/api/admin/payment-requests', body, config);
+export async function fetchCandidateById(id) {
+  const response = await api.get(`/api/admin/candidates/${id}`);
   return response.data;
 }
 
-export async function createPaymentRequestsBulk(items) {
-  const body = items.some(hasPaymentAttachments) ? toBulkPaymentRequestFormData(items) : { items };
-  const config = items.some(hasPaymentAttachments) ? { headers: { 'Content-Type': 'multipart/form-data' } } : undefined;
-  const response = await api.post('/api/admin/payment-requests/bulk', body, config);
-  return response.data;
-}
-
-
-export async function fetchPaymentRequestQueueStatus(jobId) {
-  const params = jobId ? { jobId } : {};
-  const response = await api.get('/api/admin/payment-requests/queue/status', { params });
-  return response.data;
-}
-
-export async function searchPaymentSuppliers(q) {
-  const response = await api.get('/api/admin/payment-requests/suppliers', { params: { q } });
-  return response.data;
-}
-
-export async function downloadPaymentRequestsPdf(ids) {
-  const query = Array.isArray(ids) ? ids.join(',') : String(ids);
-  const response = await api.get('/api/admin/payment-requests/pdf', {
-    params: { ids: query },
-    responseType: 'blob'
-  });
-  return response.data;
-}
-
-export async function downloadPaymentRequestsXlsx(ids) {
-  const query = Array.isArray(ids) ? ids.join(',') : String(ids);
-  const response = await api.get('/api/admin/payment-requests/xlsx', {
-    params: { ids: query },
-    responseType: 'blob'
-  });
-  return response.data;
-}
-
-export async function fetchPaymentRequestSchedules(params = {}) {
-  const response = await api.get('/api/admin/payment-requests/schedules', { params });
-  return response.data;
-}
-
-export async function createPaymentRequestSchedule(payload) {
-  const response = await api.post('/api/admin/payment-requests/schedules', payload);
-  return response.data;
-}
-
-export async function updatePaymentRequestSchedule(id, payload) {
-  const response = await api.put(`/api/admin/payment-requests/schedules/${id}`, payload);
-  return response.data;
-}
-
-export async function deletePaymentRequestSchedule(id) {
-  const response = await api.delete(`/api/admin/payment-requests/schedules/${id}`);
-  return response.data;
-}
