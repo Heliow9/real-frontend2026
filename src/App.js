@@ -13,6 +13,7 @@ import MediaPage from './pages/MediaPage';
 import NewsPage from './pages/NewsPage';
 import ProfilePage from './pages/ProfilePage';
 import SettingsPage from './pages/SettingsPage';
+import CostCentersPage from './pages/CostCentersPage';
 import UsersPage from './pages/UsersPage';
 import ComplaintsPage from './pages/ComplaintsPage';
 import PaymentRequestsPage from './pages/PaymentRequestsPage';
@@ -54,6 +55,8 @@ function App() {
         <Route path="solicitacoes/programadas" element={<RequirePermission permission="payment_requests.read"><PaymentSchedulesPage /></RequirePermission>} />
         <Route path="rh/curriculos" element={<RequirePermission permission="careers.read"><RHCandidatesPage /></RequirePermission>} />
         <Route path="configuracoes" element={<RequirePermission permission="settings.read"><SettingsPage /></RequirePermission>} />
+        <Route path="configuracoes/centros-de-custo" element={<RequirePermission permission="settings.read"><CostCentersPage /></RequirePermission>} />
+        <Route path="centros-de-custo" element={<RequirePermission permission="settings.read"><CostCentersPage /></RequirePermission>} />
       </Route>
 
       <Route path="*" element={<NotFoundPage />} />

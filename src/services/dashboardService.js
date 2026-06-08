@@ -206,6 +206,18 @@ export async function createPaymentRequest(payload) {
   return response.data;
 }
 
+export async function updatePaymentRequest(id, payload) {
+  const body = hasPaymentAttachments(payload) ? toPaymentRequestFormData(payload) : payload;
+  const config = hasPaymentAttachments(payload) ? { headers: { 'Content-Type': 'multipart/form-data' } } : undefined;
+  const response = await api.put(`/api/admin/payment-requests/${id}`, body, config);
+  return response.data;
+}
+
+export async function deletePaymentRequest(id) {
+  const response = await api.delete(`/api/admin/payment-requests/${id}`);
+  return response.data;
+}
+
 export async function createPaymentRequestsBulk(items) {
   const body = items.some(hasPaymentAttachments) ? toBulkPaymentRequestFormData(items) : { items };
   const config = items.some(hasPaymentAttachments) ? { headers: { 'Content-Type': 'multipart/form-data' } } : undefined;
@@ -260,5 +272,53 @@ export async function updatePaymentRequestSchedule(id, payload) {
 
 export async function deletePaymentRequestSchedule(id) {
   const response = await api.delete(`/api/admin/payment-requests/schedules/${id}`);
+  return response.data;
+}
+
+export async function searchCostCenters(q = '', includeInactive = false) {
+  const response = await api.get('/api/admin/cost-centers', {
+    params: { q, search: q, includeInactive }
+  });
+  return response.data;
+}
+
+export async function createCostCenter(payload) {
+  const response = await api.post('/api/admin/cost-centers', payload);
+  return response.data;
+}
+
+export async function updateCostCenter(id, payload) {
+  const response = await api.put(`/api/admin/cost-centers/${id}`, payload);
+  return response.data;
+}
+
+export async function deleteCostCenter(id) {
+  const response = await api.delete(`/api/admin/cost-centers/${id}`);
+  return response.data;
+}
+
+
+export async function fetchCareerJobs(params = {}) {
+  const response = await api.get('/api/admin/careers/jobs', { params });
+  return response.data;
+}
+
+export async function createCareerJob(payload) {
+  const response = await api.post('/api/admin/careers/jobs', payload);
+  return response.data;
+}
+
+export async function updateCareerJob(id, payload) {
+  const response = await api.put(`/api/admin/careers/jobs/${id}`, payload);
+  return response.data;
+}
+
+export async function deleteCareerJob(id) {
+  const response = await api.delete(`/api/admin/careers/jobs/${id}`);
+  return response.data;
+}
+
+export async function sendCandidateMessage(id, payload) {
+  const response = await api.post(`/api/admin/careers/applications/${id}/message`, payload);
   return response.data;
 }

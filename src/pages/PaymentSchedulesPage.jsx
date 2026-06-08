@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { FiInfo, FiPause, FiPlay, FiPlus, FiSave, FiTrash2, FiX } from 'react-icons/fi';
+import { FiEdit2, FiInfo, FiPause, FiPlay, FiPlus, FiSave, FiTrash2, FiX } from 'react-icons/fi';
 import PageHeader from '../components/PageHeader';
 import { useAuth } from '../contexts/AuthContext';
 import {
   createPaymentRequestSchedule,
   deletePaymentRequestSchedule,
   fetchPaymentRequestSchedules,
-  updatePaymentRequestSchedule
+  updatePaymentRequestSchedule,
+  searchCostCenters
 } from '../services/dashboardService';
 
 const ONBOARDING_KEY = 'payment-schedules-onboarding-seen';
@@ -85,6 +86,16 @@ function statusClass(status) {
   return 'muted';
 }
 
+
+function normalizeCostCenterItems(response) {
+  if (Array.isArray(response)) return response;
+  return response?.items || response?.data || [];
+}
+
+function getCostCenterLabel(item) {
+  if (typeof item === 'string') return item;
+  return item?.displayName || item?.name || item?.description || item?.code || '';
+}
 function PaymentSchedulesPage() {
   const { user } = useAuth();
   const [items, setItems] = useState([]);
@@ -95,6 +106,9 @@ function PaymentSchedulesPage() {
   const [error, setError] = useState('');
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [activeTab, setActiveTab] = useState('ATIVAS');
+  const [costCenterSuggestions, setCostCenterSuggestions] = useState([]);
+  const [showCostCenterSuggestions, setShowCostCenterSuggestions] = useState(false);
+  const [editingSchedule, setEditingSchedule] = useState(null);
 
   const defaultEmail = useMemo(() => user?.email || '', [user]);
   const shouldShowDayOfMonth = form.frequency === 'MENSAL' || form.frequency === 'TRIMESTRAL';
@@ -145,6 +159,33 @@ function PaymentSchedulesPage() {
     }
   }, []);
 
+  async function handleCostCenterChange(value) {
+    update('costCenter', value);
+
+    if (value.trim().length < 2) {
+      setShowCostCenterSuggestions(false);
+      return setCostCenterSuggestions([]);
+    }
+
+    setShowCostCenterSuggestions(true);
+
+    try {
+      const response = await searchCostCenters(value);
+      setCostCenterSuggestions(
+        normalizeCostCenterItems(response).map((item) => (typeof item === 'string' ? { name: item } : item))
+      );
+    } catch (err) {
+      setCostCenterSuggestions([]);
+    }
+  }
+
+  function applyCostCenter(item) {
+    const value = getCostCenterLabel(item);
+    update('costCenter', value);
+    setShowCostCenterSuggestions(false);
+    setCostCenterSuggestions([]);
+  }
+
   function update(field, value) {
     setForm((prev) => {
       const next = { ...prev, [field]: value };
@@ -167,6 +208,32 @@ function PaymentSchedulesPage() {
     setShowOnboarding(false);
   }
 
+
+  function startEditSchedule(item) {
+    setEditingSchedule(item);
+    setForm({
+      name: item.name || '',
+      frequency: item.frequency || 'MENSAL',
+      startDate: item.startDate ? String(item.startDate).slice(0, 10) : '',
+      dayOfMonth: item.dayOfMonth || '',
+      managerEmail: item.managerEmail || defaultEmail,
+      managerName: item.managerName || user?.name || '',
+      department: item.department || '',
+      payeeName: item.payeeName || '',
+      invoiceNumber: item.invoiceNumber || '',
+      costCenter: item.costCenter || '',
+      description: item.description || '',
+      bank: item.bank || '',
+      agency: item.agency || '',
+      account: item.account || '',
+      operation: item.operation || '',
+      documentNumber: item.documentNumber || '',
+      amount: item.amount || '',
+      notes: item.notes || ''
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
   async function submit(e) {
     e.preventDefault();
     setSaving(true);
@@ -180,9 +247,15 @@ function PaymentSchedulesPage() {
         dayOfMonth: shouldShowDayOfMonth && form.dayOfMonth ? Number(form.dayOfMonth) : undefined
       };
 
-      await createPaymentRequestSchedule(payload);
+      if (editingSchedule) {
+        await updatePaymentRequestSchedule(editingSchedule.id, payload);
+        setMessage('Programação atualizada com sucesso.');
+      } else {
+        await createPaymentRequestSchedule(payload);
+        setMessage('Programação criada com sucesso.');
+      }
+      setEditingSchedule(null);
       setForm({ ...emptyForm, managerEmail: defaultEmail, managerName: user?.name || '', frequency: 'MENSAL' });
-      setMessage('Programação criada com sucesso.');
       setActiveTab('ATIVAS');
       await load();
     } catch (err) {
@@ -293,6 +366,7 @@ function PaymentSchedulesPage() {
                     <td className="actions-cell">
                       {item.status !== 'CANCELADA' ? (
                         <>
+                          <button title="Editar programação" onClick={() => startEditSchedule(item)}><FiEdit2 /></button>
                           <button title={item.status === 'ATIVA' ? 'Pausar' : 'Ativar'} onClick={() => toggleStatus(item)}>
                             {item.status === 'ATIVA' ? <FiPause /> : <FiPlay />}
                           </button>
@@ -321,7 +395,7 @@ function PaymentSchedulesPage() {
       <form className="card-section payment-create" onSubmit={submit}>
         <div className="section-title-row">
           <div>
-            <h3><FiPlus /> Nova programação</h3>
+            <h3>{editingSchedule ? <FiEdit2 /> : <FiPlus />} {editingSchedule ? `Editando ${editingSchedule.name}` : 'Nova programação'}</h3>
             <p>Preencha os dados da SP recorrente. O horário é fixo: 06:00 da manhã.</p>
           </div>
 
@@ -342,7 +416,18 @@ function PaymentSchedulesPage() {
           <label>Setor<input value={form.department} onChange={(e) => update('department', e.target.value)} /></label>
           <label>Fornecedor<input value={form.payeeName} onChange={(e) => update('payeeName', e.target.value)} required /></label>
           <label>NF<input value={form.invoiceNumber} onChange={(e) => update('invoiceNumber', e.target.value)} /></label>
-          <label>Centro de custo<input value={form.costCenter} onChange={(e) => update('costCenter', e.target.value)} /></label>
+          <label className="suggestion-wrap premium-autocomplete">Centro de custo<input value={form.costCenter} onFocus={() => form.costCenter && setShowCostCenterSuggestions(true)} onChange={(e) => handleCostCenterChange(e.target.value)} placeholder="Digite para buscar no cadastro" />
+            {showCostCenterSuggestions && costCenterSuggestions.length > 0 && (
+              <div className="suggestion-list">
+                {costCenterSuggestions.map((item) => (
+                  <button type="button" key={item.id || item.displayName || item.name} onClick={() => applyCostCenter(item)}>
+                    <strong>{getCostCenterLabel(item)}</strong>
+                    <small>{item.code ? `Código ${item.code}` : 'Centro de custo cadastrado no banco'}</small>
+                  </button>
+                ))}
+              </div>
+            )}
+          </label>
           <label>Valor<input value={form.amount} onChange={(e) => update('amount', e.target.value)} required placeholder="3400,00" /></label>
           <label>CPF/CNPJ<input value={form.documentNumber} onChange={(e) => update('documentNumber', e.target.value)} /></label>
           <label>Banco<input value={form.bank} onChange={(e) => update('bank', e.target.value)} /></label>
@@ -353,7 +438,7 @@ function PaymentSchedulesPage() {
           <label className="wide">Observações<textarea value={form.notes} onChange={(e) => update('notes', e.target.value)} /></label>
         </div>
 
-        <button className="primary-button" disabled={saving}><FiSave /> {saving ? 'Salvando...' : 'Salvar programação'}</button>
+        <div className="row-actions wrap-start"><button className="primary-button" disabled={saving}><FiSave /> {saving ? 'Salvando...' : editingSchedule ? 'Salvar edição' : 'Salvar programação'}</button>{editingSchedule ? <button type="button" className="ghost-button" onClick={() => { setEditingSchedule(null); setForm({ ...emptyForm, managerEmail: defaultEmail, managerName: user?.name || '', frequency: 'MENSAL' }); }}>Cancelar edição</button> : null}</div>
       </form>
     </div>
   );

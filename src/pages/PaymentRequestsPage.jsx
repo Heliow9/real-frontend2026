@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { FiDownload, FiFileText, FiPaperclip, FiPlus, FiPrinter, FiSearch, FiTrash2 } from 'react-icons/fi';
+import { FiDownload, FiEdit2, FiFileText, FiPaperclip, FiPlus, FiPrinter, FiSearch, FiTrash2 } from 'react-icons/fi';
 import PageHeader from '../components/PageHeader';
 import {
   createPaymentRequest,
   createPaymentRequestsBulk,
+  updatePaymentRequest,
+  deletePaymentRequest,
   downloadPaymentRequestsPdf,
   downloadPaymentRequestsXlsx,
   fetchPaymentRequests,
   fetchPaymentRequestQueueStatus,
-  searchPaymentSuppliers
+  searchPaymentSuppliers,
+  searchCostCenters
 } from '../services/dashboardService';
 
 
@@ -94,6 +97,16 @@ async function getBlobErrorMessage(err, fallback) {
   return err?.response?.data?.message || err?.message || fallback;
 }
 
+
+function normalizeCostCenterItems(response) {
+  if (Array.isArray(response)) return response;
+  return response?.items || response?.data || [];
+}
+
+function getCostCenterLabel(item) {
+  if (typeof item === 'string') return item;
+  return item?.displayName || item?.name || item?.description || item?.code || '';
+}
 function PaymentRequestsPage() {
   const [items, setItems] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -108,9 +121,12 @@ function PaymentRequestsPage() {
   const [activeBulkIndex, setActiveBulkIndex] = useState(0);
   const [supplierSuggestions, setSupplierSuggestions] = useState([]);
   const [costCenterSuggestionTarget, setCostCenterSuggestionTarget] = useState(null);
+  const [costCenterSuggestions, setCostCenterSuggestions] = useState([]);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [actionLoading, setActionLoading] = useState('');
+  const [editing, setEditing] = useState(null);
+  const [editForm, setEditForm] = useState(emptyItem);
   const queuePollingRef = useRef(null);
 
   const activeBulkRow = useMemo(
@@ -123,9 +139,13 @@ function PaymentRequestsPage() {
       .map((item) => item.costCenter)
       .filter(Boolean);
 
-    return Array.from(new Set([...registeredCenters, ...COST_CENTER_OPTIONS]))
+    const fetchedCenters = costCenterSuggestions
+      .map(getCostCenterLabel)
+      .filter(Boolean);
+
+    return Array.from(new Set([...fetchedCenters, ...registeredCenters, ...COST_CENTER_OPTIONS]))
       .sort((a, b) => a.localeCompare(b, 'pt-BR'));
-  }, [items]);
+  }, [items, costCenterSuggestions]);
 
   const isAnyFileActionLoading = !!actionLoading;
 
@@ -172,7 +192,8 @@ function PaymentRequestsPage() {
   }
 
   async function handleSupplierInput(value, index = null) {
-    if (index === null) updateForm('payeeName', value);
+    if (index === 'edit') updateEditForm('payeeName', value);
+    else if (index === null) updateForm('payeeName', value);
     else updateBulk(index, 'payeeName', value);
 
     if (value.trim().length < 2) return setSupplierSuggestions([]);
@@ -185,28 +206,69 @@ function PaymentRequestsPage() {
     }
   }
 
-  function handleCostCenterInput(value, index = null) {
-    if (index === null) updateForm('costCenter', value);
+  async function handleCostCenterInput(value, index = null) {
+    if (index === 'edit') updateEditForm('costCenter', value);
+    else if (index === null) updateForm('costCenter', value);
     else updateBulk(index, 'costCenter', value);
 
-    setCostCenterSuggestionTarget(value.trim().length ? index : null);
+    if (value.trim().length < 2) {
+      setCostCenterSuggestionTarget(null);
+      return setCostCenterSuggestions([]);
+    }
+
+    setCostCenterSuggestionTarget(index);
+
+    try {
+      const response = await searchCostCenters(value);
+      setCostCenterSuggestions(
+        normalizeCostCenterItems(response).map((item) => ({
+          ...(typeof item === 'string' ? { name: item } : item),
+          targetIndex: index
+        }))
+      );
+    } catch (err) {
+      setCostCenterSuggestions([]);
+    }
   }
 
-  function getCostCenterSuggestions(value) {
+  function getCostCenterSuggestions(value, index = null) {
     const term = (value || '').trim().toLowerCase();
 
     if (!term) return [];
 
-    return availableCostCenters
+    const fetched = costCenterSuggestions
+      .filter((item) => item.targetIndex === index)
+      .map((item) => ({
+        key: item.id || item.code || getCostCenterLabel(item),
+        label: getCostCenterLabel(item),
+        hint: item.code ? `Código ${item.code}` : 'Centro de custo cadastrado no banco'
+      }))
+      .filter((item) => item.label);
+
+    const fallback = availableCostCenters
       .filter((option) => option.toLowerCase().includes(term))
+      .map((option) => ({ key: option, label: option, hint: 'Sugestão local' }));
+
+    const seen = new Set();
+    return [...fetched, ...fallback]
+      .filter((item) => {
+        const key = item.label.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
       .slice(0, 8);
   }
 
   function applyCostCenter(option, index = null) {
-    if (index === null) updateForm('costCenter', option);
-    else updateBulk(index, 'costCenter', option);
+    const value = typeof option === 'string' ? option : option.label;
+
+    if (index === 'edit') updateEditForm('costCenter', value);
+    else if (index === null) updateForm('costCenter', value);
+    else updateBulk(index, 'costCenter', value);
 
     setCostCenterSuggestionTarget(null);
+    setCostCenterSuggestions([]);
   }
 
   function applySupplier(supplier) {
@@ -219,7 +281,9 @@ function PaymentRequestsPage() {
       operation: supplier.operation || ''
     };
 
-    if (supplier.targetIndex === null || supplier.targetIndex === undefined) {
+    if (supplier.targetIndex === 'edit') {
+      setEditForm((prev) => ({ ...prev, ...patch }));
+    } else if (supplier.targetIndex === null || supplier.targetIndex === undefined) {
       setForm((prev) => ({ ...prev, ...patch }));
     } else {
       setBulkRows((prev) =>
@@ -340,6 +404,75 @@ function PaymentRequestsPage() {
       setError(err.response?.data?.message || err.message || 'Não foi possível emitir a solicitação.');
     } finally {
       setSaving(false);
+    }
+  }
+
+
+  function startEdit(item) {
+    setEditing(item);
+    setEditForm({
+      ...emptyItem,
+      managerName: item.managerName || '',
+      department: item.department || '',
+      payeeName: item.payeeName || '',
+      invoiceNumber: item.invoiceNumber || '',
+      costCenter: item.costCenter || '',
+      description: item.description || '',
+      dueDate: item.dueDate ? String(item.dueDate).slice(0, 10) : '',
+      bank: item.bank || '',
+      agency: item.agency || '',
+      account: item.account || '',
+      operation: item.operation || '',
+      documentNumber: item.documentNumber || '',
+      amount: item.amount || '',
+      notes: item.notes || '',
+      invoiceAttachment: null,
+      boletoAttachment: null
+    });
+    setMode('single');
+  }
+
+  function updateEditForm(field, value) {
+    setEditForm((prev) => ({ ...prev, [field]: value }));
+  }
+
+  function updateEditAttachment(field, file) {
+    setEditForm((prev) => ({ ...prev, [field]: file || null }));
+  }
+
+  async function submitEdit(e) {
+    e.preventDefault();
+    if (!editing || saving) return;
+    setSaving(true);
+    setError('');
+    setMessage('');
+    try {
+      await updatePaymentRequest(editing.id, editForm);
+      setEditing(null);
+      setEditForm(emptyItem);
+      setMessage('SP atualizada com sucesso. Se NF ou boleto foram trocados, o arquivo antigo foi removido do servidor.');
+      await load({ silent: true });
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || 'Não foi possível atualizar a SP.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function removePaymentRequest(item) {
+    if (!window.confirm(`Excluir definitivamente a ${item.protocol}? NF e boleto vinculados também serão removidos do servidor.`)) return;
+    setActionLoading(`delete:${item.id}`);
+    setError('');
+    setMessage('');
+    try {
+      await deletePaymentRequest(item.id);
+      setSelectedIds((ids) => ids.filter((id) => id !== item.id));
+      setMessage('SP excluída com sucesso e anexos removidos do servidor.');
+      await load({ silent: true });
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || 'Não foi possível excluir a SP.');
+    } finally {
+      setActionLoading('');
     }
   }
 
@@ -529,7 +662,7 @@ function PaymentRequestsPage() {
         <input value={data.invoiceNumber} onChange={(e) => onChange('invoiceNumber', e.target.value)} />
       </label>
 
-      <label className="suggestion-wrap">
+      <label className="suggestion-wrap premium-autocomplete">
         Centro de custo
         <input
           value={data.costCenter}
@@ -540,11 +673,12 @@ function PaymentRequestsPage() {
           placeholder="Digite o centro de custo"
         />
 
-        {costCenterSuggestionTarget === index && getCostCenterSuggestions(data.costCenter).length > 0 && (
+        {costCenterSuggestionTarget === index && getCostCenterSuggestions(data.costCenter, index).length > 0 && (
           <div className="suggestion-list">
-            {getCostCenterSuggestions(data.costCenter).map((option) => (
-              <button type="button" key={option} onClick={() => applyCostCenter(option, index)}>
-                {option}
+            {getCostCenterSuggestions(data.costCenter, index).map((option) => (
+              <button type="button" key={option.key} onClick={() => applyCostCenter(option, index)}>
+                <strong>{option.label}</strong>
+                <small>{option.hint}</small>
               </button>
             ))}
           </div>
@@ -603,7 +737,8 @@ function PaymentRequestsPage() {
           accept="application/pdf,image/jpeg,image/png,image/webp"
           onChange={(e) => {
             const file = e.target.files?.[0] || null;
-            if (index === null) updateFormAttachment('invoiceAttachment', file);
+            if (index === 'edit') updateEditAttachment('invoiceAttachment', file);
+            else if (index === null) updateFormAttachment('invoiceAttachment', file);
             else updateBulkAttachment(index, 'invoiceAttachment', file);
           }}
         />
@@ -617,7 +752,8 @@ function PaymentRequestsPage() {
           accept="application/pdf,image/jpeg,image/png,image/webp"
           onChange={(e) => {
             const file = e.target.files?.[0] || null;
-            if (index === null) updateFormAttachment('boletoAttachment', file);
+            if (index === 'edit') updateEditAttachment('boletoAttachment', file);
+            else if (index === null) updateFormAttachment('boletoAttachment', file);
             else updateBulkAttachment(index, 'boletoAttachment', file);
           }}
         />
@@ -629,6 +765,21 @@ function PaymentRequestsPage() {
   return (
     <div>
       <PageHeader title="Solicitações" subtitle="Emissão, reimpressão e relatório de solicitações de pagamento." />
+
+
+      {editing && (
+        <form className="card-section payment-create" onSubmit={submitEdit} style={{ border: '1px solid #f59e0b' }}>
+          <div className="section-title-row">
+            <div>
+              <h3><FiEdit2 /> Editando {editing.protocol}</h3>
+              <p>Ao anexar nova NF ou novo boleto, o arquivo anterior será substituído e removido do servidor.</p>
+            </div>
+            <button type="button" className="ghost" onClick={() => setEditing(null)} disabled={saving}>Cancelar edição</button>
+          </div>
+          {renderFields(editForm, updateEditForm, 'edit')}
+          <button className="primary-button" disabled={saving}>{saving ? 'Salvando edição...' : 'Salvar edição da SP'}</button>
+        </form>
+      )}
 
       <form className="card-section payment-create" onSubmit={submit}>
         <div className="section-title-row">
@@ -795,6 +946,10 @@ function PaymentRequestsPage() {
                     </td>
 
                     <td className="actions-cell">
+                      <button title="Editar SP" disabled={isAnyFileActionLoading} onClick={() => startEdit(item)}><FiEdit2 /></button>
+
+                      <button title="Excluir SP" disabled={isAnyFileActionLoading} onClick={() => removePaymentRequest(item)}>{actionLoading === `delete:${item.id}` ? '...' : <FiTrash2 />}</button>
+
                       <button title="Baixar PDF" disabled={isAnyFileActionLoading} onClick={() => downloadPdf([item.id])}>
                         {actionLoading === getActionKey('pdf', [item.id]) ? '...' : <FiDownload />}
                       </button>

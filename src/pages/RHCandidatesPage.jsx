@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { FiDownload, FiEye, FiRefreshCw, FiSearch, FiX } from 'react-icons/fi';
+import { FiDownload, FiEdit2, FiEye, FiPlus, FiRefreshCw, FiSearch, FiSend, FiTrash2, FiX } from 'react-icons/fi';
 import PageHeader from '../components/PageHeader';
-import { fetchCandidateById, fetchCandidates } from '../services/dashboardService';
+import { createCareerJob, deleteCareerJob, fetchCandidateById, fetchCandidates, fetchCareerJobs, sendCandidateMessage, updateCareerJob } from '../services/dashboardService';
 
 const initialFilters = {
   search: '',
@@ -10,6 +10,7 @@ const initialFilters = {
   estado: '',
   cargo: '',
   status: '',
+  jobId: '',
   page: 1,
   limit: 20
 };
@@ -20,6 +21,17 @@ const statusLabels = {
   APROVADO: 'Aprovado',
   REPROVADO: 'Reprovado',
   BANCO_TALENTOS: 'Banco de talentos'
+};
+
+const emptyJobForm = {
+  title: '',
+  area: '',
+  location: '',
+  description: '',
+  requirements: '',
+  benefits: '',
+  expiresAt: '',
+  status: 'PUBLICADA'
 };
 
 function formatDate(value) {
@@ -49,6 +61,11 @@ function RHCandidatesPage() {
     summary: { total: 0, byState: [], byStatus: [] }
   });
   const [selected, setSelected] = useState(null);
+  const [jobs, setJobs] = useState([]);
+  const [jobForm, setJobForm] = useState(emptyJobForm);
+  const [editingJob, setEditingJob] = useState(null);
+  const [messageForm, setMessageForm] = useState({ subject: '', message: '' });
+  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(true);
   const [modalLoading, setModalLoading] = useState(false);
   const [error, setError] = useState('');
@@ -66,7 +83,17 @@ function RHCandidatesPage() {
     }
   };
 
+  const loadJobs = async () => {
+    try {
+      const response = await fetchCareerJobs();
+      setJobs(response.data?.items || response.items || []);
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Não foi possível carregar as vagas.');
+    }
+  };
+
   useEffect(() => {
+    loadJobs();
     load(filters);
   }, [filters.page, filters.limit]);
 
@@ -119,6 +146,70 @@ function RHCandidatesPage() {
     }
   };
 
+
+  const handleJobSubmit = async (event) => {
+    event.preventDefault();
+    try {
+      setError('');
+      setSuccess('');
+      if (editingJob) {
+        await updateCareerJob(editingJob.id, jobForm);
+        setSuccess('Vaga atualizada com sucesso.');
+      } else {
+        await createCareerJob(jobForm);
+        setSuccess('Vaga publicada com sucesso.');
+      }
+      setJobForm(emptyJobForm);
+      setEditingJob(null);
+      await loadJobs();
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Não foi possível salvar a vaga.');
+    }
+  };
+
+  const handleEditJob = (job) => {
+    setEditingJob(job);
+    setJobForm({
+      title: job.title || '',
+      area: job.area || '',
+      location: job.location || '',
+      description: job.description || '',
+      requirements: job.requirements || '',
+      benefits: job.benefits || '',
+      expiresAt: job.expiresAt ? String(job.expiresAt).slice(0, 10) : '',
+      status: job.status || 'PUBLICADA'
+    });
+  };
+
+  const handleDeleteJob = async (job) => {
+    if (!window.confirm(`Remover/encerrar a vaga "${job.title}"?`)) return;
+    try {
+      setError('');
+      setSuccess('');
+      await deleteCareerJob(job.id);
+      setSuccess('Vaga removida ou encerrada com sucesso.');
+      await loadJobs();
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Não foi possível remover a vaga.');
+    }
+  };
+
+  const handleSendMessage = async (event) => {
+    event.preventDefault();
+    if (!selected?.id) return;
+    try {
+      setError('');
+      setSuccess('');
+      await sendCandidateMessage(selected.id, messageForm);
+      setSuccess('Comunicado enviado para o candidato.');
+      setMessageForm({ subject: '', message: '' });
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Não foi possível enviar o comunicado.');
+    }
+  };
+
+  const activeJobs = jobs.filter((job) => job.status === 'PUBLICADA' && (!job.expiresAt || new Date(job.expiresAt) >= new Date()));
+
   return (
     <div className="page-stack">
       <PageHeader
@@ -149,6 +240,55 @@ function RHCandidatesPage() {
       </div>
 
       {error ? <div className="alert error">{error}</div> : null}
+      {success ? <div className="alert success">{success}</div> : null}
+
+
+      <article className="panel-card form-stack">
+        <div className="list-row with-action">
+          <div>
+            <h3>Publicação de vagas</h3>
+            <p>Cadastre vagas com data de término. Candidatos podem ser filtrados pela vaga vinculada.</p>
+          </div>
+        </div>
+
+        <form className="form-stack" onSubmit={handleJobSubmit}>
+          <div className="input-grid three-columns">
+            <div><label>Título da vaga</label><input value={jobForm.title} onChange={(e) => setJobForm((c) => ({ ...c, title: e.target.value }))} required placeholder="Ex.: Eletricista" /></div>
+            <div><label>Área</label><input value={jobForm.area} onChange={(e) => setJobForm((c) => ({ ...c, area: e.target.value }))} placeholder="Operacional, Técnico..." /></div>
+            <div><label>Local</label><input value={jobForm.location} onChange={(e) => setJobForm((c) => ({ ...c, location: e.target.value }))} placeholder="Recife/PE" /></div>
+            <div><label>Disponível até</label><input type="date" value={jobForm.expiresAt} onChange={(e) => setJobForm((c) => ({ ...c, expiresAt: e.target.value }))} required /></div>
+            <div><label>Status</label><select value={jobForm.status} onChange={(e) => setJobForm((c) => ({ ...c, status: e.target.value }))}><option value="PUBLICADA">Publicada</option><option value="RASCUNHO">Rascunho</option><option value="ENCERRADA">Encerrada</option></select></div>
+          </div>
+          <div><label>Descrição</label><textarea value={jobForm.description} onChange={(e) => setJobForm((c) => ({ ...c, description: e.target.value }))} required placeholder="Descrição da oportunidade" /></div>
+          <div className="input-grid two-columns">
+            <div><label>Requisitos</label><textarea value={jobForm.requirements} onChange={(e) => setJobForm((c) => ({ ...c, requirements: e.target.value }))} /></div>
+            <div><label>Benefícios/observações</label><textarea value={jobForm.benefits} onChange={(e) => setJobForm((c) => ({ ...c, benefits: e.target.value }))} /></div>
+          </div>
+          <div className="row-actions wrap-start">
+            <button className="primary-button inline-flex" type="submit"><FiPlus size={16} /> {editingJob ? 'Salvar vaga' : 'Publicar vaga'}</button>
+            {editingJob ? <button className="ghost-button inline-flex" type="button" onClick={() => { setEditingJob(null); setJobForm(emptyJobForm); }}>Cancelar edição</button> : null}
+          </div>
+        </form>
+
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead><tr><th>Vaga</th><th>Área/local</th><th>Término</th><th>Status</th><th>Candidatos</th><th>Ações</th></tr></thead>
+            <tbody>
+              {jobs.map((job) => (
+                <tr key={job.id}>
+                  <td><strong>{job.title}</strong><small className="table-subtitle">{job.description?.slice(0, 90)}</small></td>
+                  <td>{job.area || '-'}{job.location ? ` • ${job.location}` : ''}</td>
+                  <td>{formatDate(job.expiresAt)}</td>
+                  <td><span className="badge muted">{job.status}</span></td>
+                  <td>{job.applicationsCount || 0}</td>
+                  <td className="actions-cell"><button type="button" title="Editar" onClick={() => handleEditJob(job)}><FiEdit2 /></button><button type="button" title="Remover/encerrar" onClick={() => handleDeleteJob(job)}><FiTrash2 /></button></td>
+                </tr>
+              ))}
+              {!jobs.length ? <tr><td colSpan="6"><div className="muted-block">Nenhuma vaga cadastrada.</div></td></tr> : null}
+            </tbody>
+          </table>
+        </div>
+      </article>
 
       <article className="panel-card form-stack">
         <form className="form-stack" onSubmit={handleSubmit}>
@@ -197,6 +337,14 @@ function RHCandidatesPage() {
                 value={draftFilters.estado}
                 onChange={(event) => setDraftFilters((current) => ({ ...current, estado: event.target.value.toUpperCase() }))}
               />
+            </div>
+
+            <div>
+              <label>Vaga vinculada</label>
+              <select value={draftFilters.jobId} onChange={(event) => setDraftFilters((current) => ({ ...current, jobId: event.target.value }))}>
+                <option value="">Todas</option>
+                {jobs.map((job) => <option key={job.id} value={job.id}>{job.title}</option>)}
+              </select>
             </div>
 
             <div>
@@ -252,6 +400,7 @@ function RHCandidatesPage() {
                   <th>Candidato</th>
                   <th>Cidade/UF</th>
                   <th>Cargo desejado</th>
+                  <th>Vaga</th>
                   <th>PCD</th>
                   <th>Status</th>
                   <th>Recebido em</th>
@@ -269,6 +418,7 @@ function RHCandidatesPage() {
                     </td>
                     <td>{candidate.cidade || '-'}{candidate.estado ? `/${candidate.estado}` : ''}</td>
                     <td>{candidate.funcao || candidate.cargo || candidate.areaFiltro || '-'}</td>
+                    <td>{candidate.job?.title || '-'}</td>
                     <td>{candidate.isPCD ? 'Sim' : 'Não'}</td>
                     <td><span className="badge muted">{statusLabels[candidate.status] || candidate.status || '-'}</span></td>
                     <td>{formatDate(candidate.createdAt)}</td>
@@ -291,7 +441,7 @@ function RHCandidatesPage() {
 
                 {!data.items.length ? (
                   <tr>
-                    <td colSpan="8">
+                    <td colSpan="9">
                       <div className="muted-block">Nenhum currículo encontrado para os filtros selecionados.</div>
                     </td>
                   </tr>
@@ -349,6 +499,7 @@ function RHCandidatesPage() {
                   <div><label>Escolaridade</label><strong>{selected.nivel || '-'}</strong></div>
                   <div><label>Pretensão</label><strong>{selected.pretencao || '-'}</strong></div>
                   <div><label>Área</label><strong>{selected.areaFiltro || '-'}</strong></div>
+                  <div><label>Vaga vinculada</label><strong>{selected.job?.title || '-'}</strong></div>
                   <div><label>Aprendiz</label><strong>{selected.isAprendiz ? 'Sim' : 'Não'}</strong></div>
                   <div><label>PCD</label><strong>{selected.isPCD ? 'Sim' : 'Não'}</strong></div>
                 </div>
@@ -365,6 +516,18 @@ function RHCandidatesPage() {
                 <article className="panel-card soft-card">
                   <h4>Observações</h4>
                   <p style={{ whiteSpace: 'pre-wrap' }}>{selected.observation || 'Nenhuma observação informada.'}</p>
+                </article>
+
+
+                <article className="panel-card soft-card form-stack">
+                  <h4>Enviar comunicado ao interessado</h4>
+                  {selected.email ? (
+                    <form className="form-stack" onSubmit={handleSendMessage}>
+                      <div><label>Assunto</label><input value={messageForm.subject} onChange={(e) => setMessageForm((c) => ({ ...c, subject: e.target.value }))} placeholder="Ex.: Processo seletivo RealEnergy" required /></div>
+                      <div><label>Mensagem</label><textarea value={messageForm.message} onChange={(e) => setMessageForm((c) => ({ ...c, message: e.target.value }))} placeholder="Digite o comunicado para o candidato" required /></div>
+                      <button className="primary-button inline-flex" type="submit"><FiSend size={16} /> Enviar por e-mail</button>
+                    </form>
+                  ) : <div className="muted-block">Candidato sem e-mail vinculado.</div>}
                 </article>
 
                 <article className="panel-card soft-card form-stack">
