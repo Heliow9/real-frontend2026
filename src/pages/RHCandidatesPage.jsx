@@ -68,6 +68,7 @@ function RHCandidatesPage() {
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(true);
   const [modalLoading, setModalLoading] = useState(false);
+  const [deletingJobId, setDeletingJobId] = useState(null);
   const [error, setError] = useState('');
 
   const load = async (nextFilters = filters) => {
@@ -182,15 +183,27 @@ function RHCandidatesPage() {
   };
 
   const handleDeleteJob = async (job) => {
-    if (!window.confirm(`Remover/encerrar a vaga "${job.title}"?`)) return;
+    const confirmed = window.confirm(
+      `Excluir definitivamente a vaga "${job.title}"?\n\nOs currículos já recebidos serão preservados no banco de talentos.`
+    );
+    if (!confirmed) return;
+
     try {
+      setDeletingJobId(job.id);
       setError('');
       setSuccess('');
       await deleteCareerJob(job.id);
-      setSuccess('Vaga removida ou encerrada com sucesso.');
+      setJobs((current) => current.filter((item) => item.id !== job.id));
+      if (editingJob?.id === job.id) {
+        setEditingJob(null);
+        setJobForm(emptyJobForm);
+      }
+      setSuccess('Vaga excluída com sucesso. Os currículos vinculados foram preservados.');
       await loadJobs();
     } catch (err) {
-      setError(err?.response?.data?.message || 'Não foi possível remover a vaga.');
+      setError(err?.response?.data?.message || 'Não foi possível excluir a vaga.');
+    } finally {
+      setDeletingJobId(null);
     }
   };
 
@@ -281,7 +294,7 @@ function RHCandidatesPage() {
                   <td>{formatDate(job.expiresAt)}</td>
                   <td><span className="badge muted">{job.status}</span></td>
                   <td>{job.applicationsCount || 0}</td>
-                  <td className="actions-cell"><button type="button" title="Editar" onClick={() => handleEditJob(job)}><FiEdit2 /></button><button type="button" title="Remover/encerrar" onClick={() => handleDeleteJob(job)}><FiTrash2 /></button></td>
+                  <td className="actions-cell"><button type="button" title="Editar" onClick={() => handleEditJob(job)}><FiEdit2 /></button><button type="button" title="Excluir vaga" aria-label={`Excluir vaga ${job.title}`} disabled={deletingJobId === job.id} onClick={() => handleDeleteJob(job)}>{deletingJobId === job.id ? <FiRefreshCw className="spin" /> : <FiTrash2 />}</button></td>
                 </tr>
               ))}
               {!jobs.length ? <tr><td colSpan="6"><div className="muted-block">Nenhuma vaga cadastrada.</div></td></tr> : null}
