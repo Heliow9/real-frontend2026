@@ -76,6 +76,28 @@ function getActionKey(type, ids) {
   return `${type}:${ids.join(',')}`;
 }
 
+
+function paymentAmountToNumber(value) {
+  if (typeof value === 'number') return value;
+  const normalized = String(value || '')
+    .replace(/\./g, '')
+    .replace(',', '.')
+    .replace(/[^0-9.-]/g, '');
+  return Number(normalized);
+}
+
+function validatePaymentRow(row, label = 'solicitação') {
+  const payeeName = String(row.payeeName || '').trim();
+  const description = String(row.description || '').trim();
+  const amount = paymentAmountToNumber(row.amount);
+
+  if (payeeName.length < 2) return `Informe o fornecedor/beneficiário da ${label}.`;
+  if (description.length < 10) return `Informe o referente/descrição da ${label} com pelo menos 10 caracteres.`;
+  if (!Number.isFinite(amount) || amount <= 0) return `Informe um valor maior que zero na ${label}.`;
+
+  return '';
+}
+
 async function getBlobErrorMessage(err, fallback) {
   const data = err?.response?.data;
 
@@ -381,21 +403,29 @@ function PaymentRequestsPage() {
 
     try {
       if (mode === 'single') {
+        const validationMessage = validatePaymentRow(form);
+        if (validationMessage) throw new Error(validationMessage);
+
         const response = await createPaymentRequest(form);
         setForm(emptyItem);
         setMessage(response.message || 'Solicitação enviada para a fila. Atualizando relatório automaticamente...');
         startQueuePolling(response.job?.id);
       } else {
-        const validRows = bulkRows.filter((row) => row.payeeName && row.description && row.amount);
+        const filledRows = bulkRows.filter((row) => row.payeeName || row.description || row.amount);
 
-        if (!validRows.length) {
+        if (!filledRows.length) {
           throw new Error('Adicione pelo menos uma solicitação válida ao lote.');
         }
 
-        const response = await createPaymentRequestsBulk(validRows.map(({ _key, ...row }) => row));
+        const invalidIndex = filledRows.findIndex((row, index) => validatePaymentRow(row, `SP ${index + 1}`));
+        if (invalidIndex >= 0) {
+          throw new Error(validatePaymentRow(filledRows[invalidIndex], `SP ${invalidIndex + 1}`));
+        }
+
+        const response = await createPaymentRequestsBulk(filledRows.map(({ _key, ...row }) => row));
         setBulkRows([createBulkItem()]);
         setActiveBulkIndex(0);
-        setMessage(response.message || `${validRows.length} solicitações enviadas para a fila. Atualizando relatório automaticamente...`);
+        setMessage(response.message || `${filledRows.length} solicitações enviadas para a fila. Atualizando relatório automaticamente...`);
         startQueuePolling(response.job?.id);
       }
 
@@ -447,6 +477,9 @@ function PaymentRequestsPage() {
     setError('');
     setMessage('');
     try {
+      const validationMessage = validatePaymentRow(editForm);
+      if (validationMessage) throw new Error(validationMessage);
+
       await updatePaymentRequest(editing.id, editForm);
       setEditing(null);
       setEditForm(emptyItem);
@@ -717,12 +750,23 @@ function PaymentRequestsPage() {
 
       <label>
         Valor
-        <input value={data.amount} onChange={(e) => onChange('amount', e.target.value)} placeholder="3400,00" required />
+        <input
+          value={data.amount}
+          onChange={(e) => onChange('amount', e.target.value)}
+          placeholder="3400,00"
+          inputMode="decimal"
+          required
+        />
       </label>
 
       <label className="wide">
         Referente a
-        <textarea value={data.description} onChange={(e) => onChange('description', e.target.value)} required />
+        <textarea
+          value={data.description}
+          onChange={(e) => onChange('description', e.target.value)}
+          minLength={10}
+          required
+        />
       </label>
 
       <label className="wide">

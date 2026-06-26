@@ -174,9 +174,32 @@ function hasPaymentAttachments(payload) {
   return Boolean(payload?.invoiceAttachment || payload?.boletoAttachment);
 }
 
+function normalizePaymentPayload(payload = {}) {
+  const clean = {};
+
+  Object.entries(payload).forEach(([key, value]) => {
+    if (key === 'invoiceAttachment' || key === 'boletoAttachment' || key === '_key') return;
+
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed === '') return;
+      clean[key] = trimmed;
+      return;
+    }
+
+    if (value !== null && value !== undefined) {
+      clean[key] = value;
+    }
+  });
+
+  return clean;
+}
+
 function toPaymentRequestFormData(payload) {
   const formData = new FormData();
-  const { invoiceAttachment, boletoAttachment, ...cleanPayload } = payload;
+  const { invoiceAttachment, boletoAttachment } = payload;
+  const cleanPayload = normalizePaymentPayload(payload);
+
   formData.append('payload', JSON.stringify(cleanPayload));
   if (invoiceAttachment) formData.append('invoiceAttachment', invoiceAttachment);
   if (boletoAttachment) formData.append('boletoAttachment', boletoAttachment);
@@ -185,10 +208,11 @@ function toPaymentRequestFormData(payload) {
 
 function toBulkPaymentRequestFormData(items) {
   const formData = new FormData();
-  const cleanItems = items.map(({ invoiceAttachment, boletoAttachment, ...item }, index) => {
+  const cleanItems = items.map((item, index) => {
+    const { invoiceAttachment, boletoAttachment } = item;
     if (invoiceAttachment) formData.append(`invoiceAttachment_${index}`, invoiceAttachment);
     if (boletoAttachment) formData.append(`boletoAttachment_${index}`, boletoAttachment);
-    return item;
+    return normalizePaymentPayload(item);
   });
   formData.append('payload', JSON.stringify({ items: cleanItems }));
   return formData;
@@ -200,14 +224,14 @@ export async function fetchPaymentRequests(params = {}) {
 }
 
 export async function createPaymentRequest(payload) {
-  const body = hasPaymentAttachments(payload) ? toPaymentRequestFormData(payload) : payload;
+  const body = hasPaymentAttachments(payload) ? toPaymentRequestFormData(payload) : normalizePaymentPayload(payload);
   const config = hasPaymentAttachments(payload) ? { headers: { 'Content-Type': 'multipart/form-data' } } : undefined;
   const response = await api.post('/api/admin/payment-requests', body, config);
   return response.data;
 }
 
 export async function updatePaymentRequest(id, payload) {
-  const body = hasPaymentAttachments(payload) ? toPaymentRequestFormData(payload) : payload;
+  const body = hasPaymentAttachments(payload) ? toPaymentRequestFormData(payload) : normalizePaymentPayload(payload);
   const config = hasPaymentAttachments(payload) ? { headers: { 'Content-Type': 'multipart/form-data' } } : undefined;
   const response = await api.put(`/api/admin/payment-requests/${id}`, body, config);
   return response.data;
@@ -219,8 +243,11 @@ export async function deletePaymentRequest(id) {
 }
 
 export async function createPaymentRequestsBulk(items) {
-  const body = items.some(hasPaymentAttachments) ? toBulkPaymentRequestFormData(items) : { items };
-  const config = items.some(hasPaymentAttachments) ? { headers: { 'Content-Type': 'multipart/form-data' } } : undefined;
+  const hasAttachments = items.some(hasPaymentAttachments);
+  const body = hasAttachments
+    ? toBulkPaymentRequestFormData(items)
+    : { items: items.map(normalizePaymentPayload) };
+  const config = hasAttachments ? { headers: { 'Content-Type': 'multipart/form-data' } } : undefined;
   const response = await api.post('/api/admin/payment-requests/bulk', body, config);
   return response.data;
 }

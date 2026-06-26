@@ -1,7 +1,16 @@
 import axios from 'axios';
 
+const DEFAULT_API_URL = 'https://api-realenergy.duckdns.org';
+
+function normalizeApiBaseURL(value) {
+  const raw = String(value || DEFAULT_API_URL).trim();
+  return raw.replace(/\/+$/, '').replace(/\/api$/i, '');
+}
+
+export const API_BASE_URL = normalizeApiBaseURL(process.env.REACT_APP_API_URL);
+
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || 'https://real-backend-2026-1.onrender.com',
+  baseURL: API_BASE_URL,
   timeout: 45000,
 });
 

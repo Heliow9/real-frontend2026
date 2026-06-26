@@ -229,7 +229,7 @@ function DashboardHomePage() {
           <div className="status-list">
             <div>
               <span>API</span>
-              <strong>{process.env.REACT_APP_API_URL || 'https://real-backend-2026.onrender.com'}</strong>
+              <strong>{process.env.REACT_APP_API_URL || 'https://api-realenergy.duckdns.org'}</strong>
             </div>
             <div>
               <span>Autenticação</span>

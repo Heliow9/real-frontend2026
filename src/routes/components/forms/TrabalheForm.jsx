@@ -254,10 +254,11 @@ function TrabalheForm() {
             formData.append('areaFiltro', areaFiltro);
             formData.append('source', 'site');
 
-            const apiBaseUrl =
+            const rawApiBaseUrl =
                 process.env.REACT_APP_API_URL ||
                 process.env.REACT_APP_API_BASE_URL ||
-                'https://api-realenergy.duckdns.org/api';
+                'https://api-realenergy.duckdns.org';
+            const apiBaseUrl = String(rawApiBaseUrl).replace(/\/+$/, '').replace(/\/api$/i, '') + '/api';
 
             await axios.post(`${apiBaseUrl}/public/careers/applications`, formData, {
                 headers: {
